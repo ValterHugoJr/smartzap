@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { LogIn, Pause, Play, CalendarClock, Loader2, KeyRound, Eye, Sparkles } from "lucide-react";
+import { LogIn, Pause, Play, CalendarClock, Loader2, KeyRound, Eye, Sparkles, Crown } from "lucide-react";
 import { brand } from "@/config/brand";
-import { listCompanies, suspendCompany, extendTrial, resetCompanyOwnerPassword, getCompanyDetails } from "@/lib/master.functions";
+import { listCompanies, suspendCompany, extendTrial, resetCompanyOwnerPassword, getCompanyDetails, setCompanyLifetime } from "@/lib/master.functions";
 import { adminGrantCredits } from "@/lib/credits.functions";
 
 export const Route = createFileRoute("/master/empresas")({
@@ -21,6 +21,7 @@ function EmpresasPage() {
   const navigate = useNavigate();
   const list = useServerFn(listCompanies);
   const suspend = useServerFn(suspendCompany);
+  const lifetimeFn = useServerFn(setCompanyLifetime);
   const extend = useServerFn(extendTrial);
   const resetPwd = useServerFn(resetCompanyOwnerPassword);
   const details = useServerFn(getCompanyDetails);
@@ -60,6 +61,20 @@ function EmpresasPage() {
     reload();
   }
 
+  async function doLifetime(c: any) {
+    const isLifetime = c.status_cobranca === "vitalicio";
+    if (!confirm(isLifetime
+                 ? `Remover o acesso vitalício de "${c.nome}"? Ela volta para o status ativo comum.`
+                 : `Tornar "${c.nome}" vitalícia? Ela nunca será bloqueada por falta de pagamento.`)) return;
+    try {
+      await lifetimeFn({ data: { companyId: c.id, lifetime: !isLifetime } });
+      toast.success(isLifetime ? "Vitalício removido — empresa ativa comum" : "Empresa agora é vitalícia");
+      reload();
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao alterar vitalício");
+    }
+  }
+ 
   async function doExtend(c: any) {
     const days = Number(prompt("Estender trial por quantos dias?", "14"));
     if (!days || isNaN(days)) return;
@@ -159,7 +174,7 @@ function EmpresasPage() {
                   <StatusBadge s={c.status_cobranca} />
                 </div>
                 <div className="col-span-2 text-xs text-muted-foreground">
-                  {c.trial_ate ? new Date(c.trial_ate).toLocaleDateString("pt-BR") : "—"}
+                  {c.status_cobranca === "vitalicio" ? "Vitalício" : c.trial_ate ? new Date(c.trial_ate).toLocaleDateString("pt-BR") : "—"}
                 </div>
                 <div className="col-span-2 text-xs text-muted-foreground">
                   {new Date(c.created_at).toLocaleDateString("pt-BR")}
@@ -179,6 +194,10 @@ function EmpresasPage() {
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => doExtend(c)} title="Estender trial">
                     <CalendarClock className="size-3.5" />
+                  </Button>
+                  <Button size="sm" variant={c.status_cobranca === "vitalicio" ? "default" : "outline"} onClick={() => doLifetime(c)}
+                    title={c.status_cobranca === "vitalicio" ? "Vitalícia — clique para remover" : "Tornar vitalícia"}>
+                    <Crown className="size-3.5" />
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => toggleSuspend(c)}
                     title={c.status_cobranca === "suspenso" ? "Reativar" : "Suspender"}>
@@ -289,6 +308,7 @@ function Field({ k, v }: { k: string; v: any }) {
 }
 
 function StatusBadge({ s }: { s: string }) {
+  if (s === "vitalicio") return <Badge className="bg-amber-500 text-white">Vitalícia</Badge>;
   if (s === "ativo") return <Badge className="bg-primary">Ativa</Badge>;
   if (s === "trial") return <Badge variant="secondary">Trial</Badge>;
   return <Badge variant="destructive">Suspensa</Badge>;
