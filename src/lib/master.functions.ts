@@ -30,7 +30,7 @@ export const masterKpis = createServerFn({ method: "POST" })
     const subs = subscriptions ?? [];
     const stats = {
       total: all.length,
-      ativas: all.filter((c: any) => c.status_cobranca === "ativo").length,
+      ativas: all.filter((c: any) => c.status_cobranca === "ativo" || c.status_cobranca === "vitalicio").length,
       trial: all.filter((c: any) => c.status_cobranca === "trial").length,
       suspensas: all.filter((c: any) => c.status_cobranca === "suspenso").length,
       novasMes: all.filter((c: any) => new Date(c.created_at).getTime() >= monthStart).length,
@@ -113,6 +113,33 @@ export const suspendCompany = createServerFn({ method: "POST" })
       .update({ status_cobranca: data.suspend ? "suspenso" : "ativo" })
       .eq("id", data.companyId);
     if (error) throw error;
+    return { ok: true };
+  });
+
+export const setCompanyLifetime = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { companyId: string; lifetime: boolean }) => d)
+  .handler(async ({ context, data }) => {
+    await assertSuper(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const farFuture = "2099-12-31T23:59:59.000Z";
+    if (data.lifetime) {
+      const { error } = await supabaseAdmin
+        .from("company")
+        .update({ status_cobranca: "vitalicio", trial_ate: farFuture })
+        .eq("id", data.companyId);
+      if (error) throw error;
+      await supabaseAdmin
+        .from("subscription")
+        .update({ status: "active", current_period_end: farFuture })
+        .eq("company_id", data.companyId);
+    } else {
+      const { error } = await supabaseAdmin
+        .from("company")
+        .update({ status_cobranca: "ativo" })
+        .eq("id", data.companyId);
+      if (error) throw error;
+    }
     return { ok: true };
   });
 
