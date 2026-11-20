@@ -7,7 +7,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
         try {
           const payload: any = await request.json().catch(() => ({}));
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-          const { evoSendText, evoSendPresence } = await import("@/lib/evolution.server");
+          const { evoSendText, evoSendPresence, evoSendMedia } = await import("@/lib/evolution.server");
           const { lovableAiChat } = await import("@/lib/lovable-ai.server");
           const { buildSystemPrompt, parseAiOutput } = await import("@/lib/ai-prompt");
 
@@ -120,7 +120,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               .order("ordem", { ascending: true }),
             supabaseAdmin
               .from("produto")
-              .select("nome, preco, descricao, ativo, ordem")
+              .select("nome, preco, descricao, ativo, ordem, midia_url")
               .eq("company_id", companyId)
               .eq("ativo", true)
               .order("ordem", { ascending: true }),
@@ -130,6 +130,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             nome: p.nome,
             preco: p.preco,
             descricao: p.descricao,
+            midia_url: p.midia_url ?? null,
           }));
 
           if (isOptOutMessage(lower)) {
@@ -324,7 +325,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             console.error("[ai]", e?.message);
           }
 
-          const { parts, stage, agendar } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
+          const { parts, stage, agendar, midia } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
           const finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
 
           // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...]
@@ -364,6 +365,34 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               }
             } catch (e: any) {
               console.error("[send]", e?.message);
+            }
+          }
+
+          // Mídia pedida pela IA via [ENVIAR_MIDIA: nome do produto] — só envia
+          // se o nome bater com um produto ativo que tenha midia_url cadastrada.
+          if (midia) {
+            const alvo = produtos.find(
+              (p: any) => p.midia_url && p.nome.toLowerCase() === midia.toLowerCase(),
+            );
+            if (alvo?.midia_url) {
+              try {
+                const isDoc = alvo.midia_url.split("?")[0].toLowerCase().endsWith(".pdf");
+                const caption = isDoc
+                  ? alvo.nome
+                  : `${alvo.nome}${alvo.preco ? ` — R$ ${alvo.preco}` : ""}`;
+                await evoSendMedia(instanceName, number, alvo.midia_url, caption);
+                await supabaseAdmin.from("mensagens").insert({
+                  company_id: companyId,
+                  user_id: userId,
+                  numero: number,
+                  contato_nome: pushName ?? null,
+                  direcao: "saida",
+                  autor: "ia",
+                  texto: isDoc ? `📄 Arquivo enviado: ${alvo.nome}` : `📷 Foto enviada: ${alvo.nome}`,
+                });
+              } catch (e: any) {
+                console.error("[midia]", e?.message);
+              }
             }
           }
 
