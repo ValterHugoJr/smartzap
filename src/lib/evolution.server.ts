@@ -146,6 +146,24 @@ export async function evoSetWebhook(instanceName: string, webhookUrl: string) {
   });
 }
 
+export async function evoSendMedia(instanceName: string, number: string, mediaUrl: string, caption?: string) {
+  // Evolution v2: POST /message/sendMedia/{instance}
+  const clean = mediaUrl.split("?")[0].toLowerCase();
+  const isPdf = clean.endsWith(".pdf");
+  const isVideo = /\.(mp4|mov|webm)$/.test(clean);
+  const mediatype = isPdf ? "document" : isVideo ? "video" : "image";
+  return evo(`/message/sendMedia/${encodeURIComponent(instanceName)}`, {
+    method: "POST",
+    json: {
+      number,
+      mediatype,
+      media: mediaUrl,
+      caption: caption || "",
+      ...(isPdf ? { fileName: "catalogo.pdf" } : {}),
+    },
+  });
+}
+
 export async function evoSendText(instanceName: string, number: string, text: string) {
   return evo(`/message/sendText/${encodeURIComponent(instanceName)}`, {
     method: "POST",
