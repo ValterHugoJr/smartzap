@@ -1425,6 +1425,7 @@ export type Database = {
           created_at: string
           descricao: string | null
           id: string
+                    midia_url: string | null
           nome: string
           ordem: number
           preco: number
@@ -1435,6 +1436,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+                    midia_url?: string | null
           nome: string
           ordem?: number
           preco?: number
@@ -1445,6 +1447,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+                    midia_url?: string | null
           nome?: string
           ordem?: number
           preco?: number
