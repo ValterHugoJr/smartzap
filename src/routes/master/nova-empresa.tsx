@@ -53,7 +53,7 @@ function NovaEmpresa() {
     setBusy(true); setCreated(null);
     try {
       const r = await create({
-        data: { nome, ownerEmail, planId: planId || null, trialDays: cortesia ? 0 : trialDays, password: password || null },
+        data: { nome, ownerEmail, planId: cortesia ? null : (planId || null), trialDays: cortesia ? 0 : trialDays, password: password || null },
       });
       toast.success(cortesia ? "Empresa criada com acesso cortesia (sem cobrança)" : "Empresa criada e liberada com trial");
       setCreated({ email: ownerEmail, password: r.tempPassword ?? (password || null) });
@@ -112,11 +112,14 @@ function NovaEmpresa() {
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 A empresa nasce com status ativo e NÃO é bloqueada no fim do trial.
                 Use para parceiros, testes e usuários que não pagam assinatura.
+                As opções de plano ficam ocultas: a empresa é criada sem plano
+                vinculado e valem os limites padrão do sistema.
               </p>
             </div>
             <Switch checked={cortesia} onCheckedChange={setCortesia} />
           </div>
 
+          {!cortesia && (
           <div>
             <Label>Plano</Label>
             <div className="grid sm:grid-cols-3 gap-2 mt-2">
@@ -143,9 +146,10 @@ function NovaEmpresa() {
               })}
             </div>
           </div>
+          )}
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={busy || !planId}>
+            <Button type="submit" disabled={busy || (!cortesia && !planId)}>
               {busy ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
               Criar e liberar acesso
             </Button>
