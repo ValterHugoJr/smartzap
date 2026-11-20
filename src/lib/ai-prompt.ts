@@ -2,6 +2,7 @@ export interface ProdutoBrief {
   nome: string;
   preco?: number | string | null;
   descricao?: string | null;
+  midia_url?: string | null;
 }
 
 export interface StageBrief {
@@ -202,9 +203,18 @@ export function buildSystemPrompt(
         .map((p) => {
           const preco = p.preco !== undefined && p.preco !== null && p.preco !== "" ? ` — R$ ${p.preco}` : "";
           const desc = p.descricao ? ` (${p.descricao})` : "";
-          return `• ${p.nome}${preco}${desc}`;
+          const midia = p.midia_url ? " [TEM MÍDIA: foto/arquivo que você pode enviar]" : "";
+          return `• ${p.nome}${preco}${desc}${midia}`;
         })
         .join("\n")
+    : "";
+
+  const algumProdutoComMidia = produtos.some((p) => !!p.midia_url);
+  const midiaBloco = algumProdutoComMidia
+    ? `MÍDIA (fotos e catálogos):
+Alguns produtos do catálogo estão marcados com TEM MÍDIA. Quando o cliente pedir pra ver foto, catálogo, cardápio, tabela de preços ou imagens de um produto — OU quando você recomendar um produto com mídia e mostrar a foto/arquivo ajudar a vender — inclua na sua resposta, em uma linha separada, exatamente:
+[ENVIAR_MIDIA: nome exato do produto]
+Esse marcador é interno, NÃO aparece pro cliente: o sistema envia a foto/arquivo de verdade logo depois das suas mensagens de texto. Envie no máximo UMA mídia por resposta. NUNCA invente link e nunca prometa mídia de produto que NÃO está marcado com TEM MÍDIA.`
     : "";
 
   const stageNames = stages.map((s) => s.nome).join(" | ");
@@ -228,6 +238,7 @@ export function buildSystemPrompt(
     c.regiao_horario ? `Região / horário de atendimento: ${c.regiao_horario}` : "",
     c.produtos_servicos ? `Produtos/serviços (descrição livre):\n${c.produtos_servicos}` : "",
     produtosBloco,
+    midiaBloco,
     c.ofertas ? `OFERTAS ATIVAS:\n${c.ofertas}` : "",
     c.cupom ? `Cupom disponível: ${c.cupom} (só ofereça quando fizer sentido pra fechar)` : "",
     c.formas_pagamento ? `Formas de pagamento aceitas: ${c.formas_pagamento}` : "",
@@ -313,10 +324,17 @@ export interface AgendarBrief { inicio: string; fim: string; titulo: string; }
 export function parseAiOutput(
   raw: string,
   stages?: StageBrief[],
-): { parts: string[]; stage: string | null; agendar: AgendarBrief | null } {
+): { parts: string[]; stage: string | null; agendar: AgendarBrief | null; midia: string | null } {
   let text = raw || "";
   let stage: string | null = null;
   let agendar: AgendarBrief | null = null;
+  let midia: string | null = null;
+
+  const midiaMatch = text.match(/\[\s*ENVIAR_MIDIA\s*:\s*([^\]]+)\]/i);
+  if (midiaMatch) {
+    midia = midiaMatch[1].trim() || null;
+    text = text.replace(midiaMatch[0], "").trim();
+  }
 
   const agMatch = text.match(/\[\s*AGENDAR\s*:\s*([^\]]+)\]/i);
   if (agMatch) {
@@ -351,7 +369,7 @@ export function parseAiOutput(
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
     .slice(0, 3);
-  return { parts: parts.length ? parts : [text.trim()].filter(Boolean), stage, agendar };
+  return { parts: parts.length ? parts : [text.trim()].filter(Boolean), stage, agendar, midia };
 }
 
 export function classifyStagePromptInstruction(): string {
