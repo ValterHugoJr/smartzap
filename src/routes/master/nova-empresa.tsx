@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Loader2, Plus, Copy, Check } from "lucide-react";
 import { brand } from "@/config/brand";
@@ -31,6 +32,7 @@ function NovaEmpresa() {
   const [password, setPassword] = useState("");
   const [planId, setPlanId] = useState<string>("");
   const [trialDays, setTrialDays] = useState<number>(3);
+  const [cortesia, setCortesia] = useState(false);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ email: string; password: string | null } | null>(null);
 
@@ -51,9 +53,9 @@ function NovaEmpresa() {
     setBusy(true); setCreated(null);
     try {
       const r = await create({
-        data: { nome, ownerEmail, planId: planId || null, trialDays, password: password || null },
+        data: { nome, ownerEmail, planId: planId || null, trialDays: cortesia ? 0 : trialDays, password: password || null },
       });
-      toast.success("Empresa criada e liberada com trial");
+      toast.success(cortesia ? "Empresa criada com acesso cortesia (sem cobrança)" : "Empresa criada e liberada com trial");
       setCreated({ email: ownerEmail, password: r.tempPassword ?? (password || null) });
       setNome(""); setOwnerEmail(""); setPassword("");
     } catch (e: any) { toast.error(e?.message || "Falha"); }
@@ -66,7 +68,8 @@ function NovaEmpresa() {
         <h1 className="text-2xl font-bold tracking-tight">Nova empresa</h1>
         <p className="text-sm text-muted-foreground">
           Cria a empresa, o usuário responsável e libera o plano com período de teste.
-          Ao fim do trial o cliente precisa cadastrar o cartão para continuar.
+          Ao fim do trial o cliente precisa pagar para continuar — ou crie no modo
+          cortesia, com acesso liberado e sem cobrança.
         </p>
       </div>
 
@@ -96,10 +99,22 @@ function NovaEmpresa() {
               <Input
                 type="number" min={0} max={90}
                 value={trialDays}
+                disabled={cortesia}
                 onChange={(e) => setTrialDays(Math.max(0, Math.min(90, Number(e.target.value) || 0)))}
               />
               <p className="text-[11px] text-muted-foreground mt-1">Após esse prazo o cliente precisa pagar pra continuar.</p>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-xl border p-3">
+            <div>
+              <div className="text-sm font-medium">Acesso cortesia — sem cobrança</div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                A empresa nasce com status ativo e NÃO é bloqueada no fim do trial.
+                Use para parceiros, testes e usuários que não pagam assinatura.
+              </p>
+            </div>
+            <Switch checked={cortesia} onCheckedChange={setCortesia} />
           </div>
 
           <div>
