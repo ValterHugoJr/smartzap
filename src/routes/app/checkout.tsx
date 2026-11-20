@@ -99,12 +99,12 @@ function CheckoutPage() {
   const hasCompany = !!ctx.company;
   const trialActive =
     hasCompany && ctx.company!.status_cobranca === "trial" && trialDaysLeft(ctx.company!.trial_ate) > 0;
-  const paywallMode = hasCompany && !trialActive && ctx.company!.status_cobranca !== "ativo";
+  const paywallMode = hasCompany && !trialActive && ctx.company!.status_cobranca !== "ativo" && ctx.company!.status_cobranca !== "vitalicio";
 
   // Empresa ativa ou em trial ainda válido → não deveria estar aqui
   useEffect(() => {
     if (!ctx.company) return;
-    if (ctx.company.status_cobranca === "ativo" || trialActive) {
+    if (ctx.company.status_cobranca === "ativo" || ctx.company.status_cobranca === "vitalicio" || trialActive) {
       navigate({ to: ctx.company.onboarding_completed ? "/app/dashboard" : "/app/onboarding", replace: true });
     }
   }, [ctx.company, navigate, trialActive]);
