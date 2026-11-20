@@ -276,10 +276,10 @@ export const testAiReply = createServerFn({ method: "POST" })
     const [{ data: cfg }, { data: stagesRows }, { data: prodRows }] = await Promise.all([
       supabase.from("agent_config").select("*").eq("company_id", companyId).maybeSingle(),
       supabase.from("crm_stage").select("nome, tipo, ordem").eq("company_id", companyId).order("ordem", { ascending: true }),
-      supabase.from("produto").select("nome, preco, descricao, ordem").eq("company_id", companyId).eq("ativo", true).order("ordem", { ascending: true }),
+      supabase.from("produto").select("nome, preco, descricao, ordem, midia_url").eq("company_id", companyId).eq("ativo", true).order("ordem", { ascending: true }),
     ]);
     const stages = (stagesRows ?? []).map((s: any) => ({ nome: s.nome, tipo: s.tipo }));
-    const produtos = (prodRows ?? []).map((p: any) => ({ nome: p.nome, preco: p.preco, descricao: p.descricao }));
+    const produtos = (prodRows ?? []).map((p: any) => ({ nome: p.nome, preco: p.preco, descricao: p.descricao, midia_url: p.midia_url ?? null }));
     const system = buildSystemPrompt(cfg ?? {}, {
       responderEmPartes: cfg?.responder_em_partes ?? true,
       stages,
@@ -313,4 +313,3 @@ export const testAiReply = createServerFn({ method: "POST" })
     const { parts, stage } = parseAiOutput(raw, stages);
     return { reply: parts.join("\n\n"), parts, stage, system };
   });
-
