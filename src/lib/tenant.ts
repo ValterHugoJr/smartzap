@@ -6,7 +6,7 @@ export type CompanyRow = {
   primary_color: string;
   logo_url: string | null;
   telefone: string | null;
-  status_cobranca: "trial" | "ativo" | "suspenso" | "pendente" | "checkout_pending";
+  status_cobranca: "trial" | "ativo" | "suspenso" | "pendente" | "checkout_pending" | "vitalicio";
   trial_ate: string;
   onboarding_completed?: boolean | null;
   onboarding_step?: number | null;
