@@ -108,7 +108,7 @@ function applyPreset(p: PersonalidadePreset, cfg: any, setCfg: (fn: any) => void
 }
 
 
-interface Produto { id: string; nome: string; preco: number; descricao: string | null; ativo: boolean; ordem: number; }
+interface Produto { id: string; nome: string; preco: number; descricao: string | null; ativo: boolean; ordem: number; midia_url: string | null; }
 
 function AgentePage() {
   const ctx = Route.useRouteContext();
@@ -199,7 +199,7 @@ function AgentePage() {
 
   const promptPreview = buildSystemPrompt(cfg, {
     responderEmPartes: cfg.responder_em_partes,
-    produtos: produtos.filter((p) => p.ativo).map((p) => ({ nome: p.nome, preco: p.preco, descricao: p.descricao })),
+    produtos: produtos.filter((p) => p.ativo).map((p) => ({ nome: p.nome, preco: p.preco, descricao: p.descricao, midia_url: p.midia_url })),
   });
 
   return (
@@ -313,7 +313,7 @@ function AgentePage() {
             <TabsContent value="produtos" className="space-y-3">
               <Section>
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">Catálogo real usado pela IA.</p>
+                  <p className="text-sm text-muted-foreground">Catálogo real usado pela IA. Se um produto tiver link de foto ou arquivo (catálogo, cardápio, tabela), a IA pode enviar essa mídia pro cliente durante a conversa no WhatsApp.</p>
                   <Button size="sm" onClick={addProduto}><Plus className="size-4 mr-1" />Novo produto</Button>
                 </div>
                 <div className="space-y-2">
@@ -325,6 +325,7 @@ function AgentePage() {
                       <Switch checked={p.ativo} onCheckedChange={(v) => updProduto(p.id, { ativo: v })} />
                       <button onClick={() => delProduto(p.id)} className="text-muted-foreground hover:text-destructive p-1"><Trash2 className="size-4" /></button>
                       <Textarea className="sm:col-span-4" rows={2} value={p.descricao ?? ""} onChange={(e) => updProduto(p.id, { descricao: e.target.value })} placeholder="Descrição" />
+                      <Input className="sm:col-span-4" value={p.midia_url ?? ""} onChange={(e) => updProduto(p.id, { midia_url: e.target.value })} placeholder="Link da foto ou do catálogo (URL pública — foto do produto, PDF do catálogo, cardápio...)" />
                     </div>
                   ))}
                 </div>
