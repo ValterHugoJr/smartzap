@@ -20,6 +20,8 @@ export const sendCsat = createServerFn({ method: "POST" })
     const companyId = await resolveCompanyId(supabase, userId);
     const numero = String(data.numero).replace(/\D/g, "");
     if (!numero) throw new Error("Número inválido.");
+    const { data: known } = await supabase.from("crm_cards").select("id").eq("company_id", companyId).eq("numero", numero).limit(1).maybeSingle();
+    if (!known) throw new Error("Só é possível enviar pesquisa para contatos existentes.");
 
     const { data: row, error } = await supabase
       .from("csat_response")

@@ -46,6 +46,10 @@ async function handle(request: Request) {
       const numero = String(body.numero || "").replace(/\D/g, "");
       const texto = String(body.texto || "");
       if (!numero || !texto) return new Response(JSON.stringify({ error: "numero e texto obrigatórios" }), { status: 400 });
+      if (numero.length < 10 || numero.length > 15 || texto.length > 4096) return new Response(JSON.stringify({ error: "numero ou texto inválido" }), { status: 400 });
+      const { data: known } = await (supabaseAdmin as any).from("crm_cards")
+        .select("id").eq("company_id", companyId).eq("numero", numero).limit(1).maybeSingle();
+      if (!known) return new Response(JSON.stringify({ error: "Contato não encontrado nesta empresa" }), { status: 403 });
       const { data: inst } = await (supabaseAdmin as any).from("whatsapp_instances")
         .select("instance_name, status").eq("company_id", companyId).maybeSingle();
       if (!inst || inst.status !== "open") return new Response(JSON.stringify({ error: "WhatsApp não conectado" }), { status: 400 });

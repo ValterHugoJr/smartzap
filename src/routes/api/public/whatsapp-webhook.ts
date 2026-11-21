@@ -334,7 +334,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const throttleReason = await getAiThrottleReason(supabaseAdmin, companyId, number);
           if (throttleReason) {
             await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
-            console.warn("[whatsapp.safety] resposta pausada", throttleReason, companyId, number);
+            console.warn("[whatsapp.safety] resposta pausada", throttleReason, companyId);
             return new Response(throttleReason, { status: 200 });
           }
           const plan = await getCompanyPlan(companyId);
