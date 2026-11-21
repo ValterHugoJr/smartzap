@@ -189,6 +189,7 @@ export function buildSystemPrompt(
     produtos?: ProdutoBrief[];
     stages?: StageBrief[];
     googleConectado?: boolean;
+    agendaOcupada?: string;
   },
 ): string {
   const partes = opts?.responderEmPartes ?? c.responder_em_partes ?? true;
@@ -302,7 +303,11 @@ Hoje é ${nowIso} (UTC, fuso America/Sao_Paulo). Quando o cliente CONFIRMAR um h
 [AGENDAR: AAAA-MM-DDTHH:MM | AAAA-MM-DDTHH:MM | título curto]
 A primeira data é o início, a segunda é o fim (use ${c.duracao_padrao || "30 min"} se o cliente não disser). ` +
         `Use o fuso -03:00 nos horários (ex.: 2026-06-20T15:00:00-03:00). Esse marcador é interno e NÃO aparece pro cliente. ` +
-        `Só emita o marcador quando o cliente confirmou claramente. Nunca invente horários que o cliente não disse.`,
+        `Só emita o marcador quando o cliente confirmou claramente. Nunca invente horários que o cliente não disse.` +
+        (opts?.agendaOcupada
+          ? `\n\nVERIFICAÇÃO DE DISPONIBILIDADE (obrigatório): abaixo estão os horários já OCUPADOS na agenda real da empresa nos próximos dias:\n${opts.agendaOcupada}\n` +
+            `NUNCA ofereça nem confirme um horário que cruze com um período ocupado. Se o cliente pedir um horário ocupado, avise com naturalidade que aquele já está preenchido e sugira os horários livres mais próximos dentro das janelas de atendimento. Só emita o marcador [AGENDAR] para horário LIVRE.`
+          : ""),
     );
   }
 
