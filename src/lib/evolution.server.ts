@@ -8,17 +8,21 @@ const SUPPORT_SUFFIX = " Se persistir, fale com o suporte: https://wa.me/5551982
 function env() {
   const url = process.env.EVOLUTION_API_URL;
   const key = process.env.EVOLUTION_API_KEY;
-  if (!url || !key) {
-    throw new Error(`Servidor do WhatsApp não configurado. Configure EVOLUTION_API_URL e EVOLUTION_API_KEY nos segredos do backend.${SUPPORT_SUFFIX}`);
+  if (!url) {
+    throw new Error(`Servidor do WhatsApp não configurado. Configure EVOLUTION_API_URL nos segredos do backend.${SUPPORT_SUFFIX}`);
   }
-  return { url: url.replace(/\/+$/, ""), key };
+  return { url: url.replace(/\/+$/, ""), key: key || "" };
 }
 
 async function evo<T = any>(
   path: string,
-  init: RequestInit & { json?: any } = {},
+  init: RequestInit & { json?: any; apiKey?: string } = {},
 ): Promise<T> {
-  const { url, key } = env();
+  const { url, key: globalKey } = env();
+  const key = init.apiKey || globalKey;
+  if (!key) {
+    throw new Error(`Servidor do WhatsApp não configurado. Configure EVOLUTION_API_KEY nos segredos do backend.${SUPPORT_SUFFIX}`);
+  }
   const headers: Record<string, string> = {
     apikey: key,
     "Content-Type": "application/json",
@@ -48,7 +52,7 @@ async function evo<T = any>(
   return data as T;
 }
 
-export async function evoCreateInstance(instanceName: string, webhookUrl?: string) {
+export async function evoCreateInstance(instanceName: string, webhookUrl?: string, apiKey?: string) {
   // Evolution v2: POST /instance/create
   const body: any = {
     instanceName,
@@ -63,12 +67,12 @@ export async function evoCreateInstance(instanceName: string, webhookUrl?: strin
       events: ["MESSAGES_UPSERT"],
     };
   }
-  return evo(`/instance/create`, { method: "POST", json: body });
+  return evo(`/instance/create`, { method: "POST", json: body, apiKey });
 }
 
-export async function evoConnect(instanceName: string): Promise<{ base64?: string; code?: string; pairingCode?: string }> {
+export async function evoConnect(instanceName: string, apiKey?: string): Promise<{ base64?: string; code?: string; pairingCode?: string }> {
   // GET /instance/connect/{instance} → { base64, code, pairingCode }
-  return evo(`/instance/connect/${encodeURIComponent(instanceName)}`, { method: "GET" });
+  return evo(`/instance/connect/${encodeURIComponent(instanceName)}`, { method: "GET", apiKey });
 }
 
 function asImageDataUrl(value: unknown, allowRawBase64 = false): string | null {
@@ -109,8 +113,8 @@ function extractQrCode(payload: any): string | null {
   return null;
 }
 
-export async function evoGetQr(instanceName: string): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
-  const payload: any = await evoConnect(instanceName);
+export async function evoGetQr(instanceName: string, apiKey?: string): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
+  const payload: any = await evoConnect(instanceName, apiKey);
   const image =
     asImageDataUrl(payload?.base64, true) ||
     asImageDataUrl(payload?.qrcode?.base64, true) ||
@@ -127,11 +131,11 @@ export async function evoGetQr(instanceName: string): Promise<{ qrBase64: string
   return { qrBase64: null, code: null, pairingCode: payload?.pairingCode ?? payload?.qrcode?.pairingCode ?? null };
 }
 
-export async function evoState(instanceName: string): Promise<{ instance?: { state?: string }; state?: string }> {
-  return evo(`/instance/connectionState/${encodeURIComponent(instanceName)}`, { method: "GET" });
+export async function evoState(instanceName: string, apiKey?: string): Promise<{ instance?: { state?: string }; state?: string }> {
+  return evo(`/instance/connectionState/${encodeURIComponent(instanceName)}`, { method: "GET", apiKey });
 }
 
-export async function evoSetWebhook(instanceName: string, webhookUrl: string) {
+export async function evoSetWebhook(instanceName: string, webhookUrl: string, apiKey?: string) {
   return evo(`/webhook/set/${encodeURIComponent(instanceName)}`, {
     method: "POST",
     json: {
@@ -143,10 +147,11 @@ export async function evoSetWebhook(instanceName: string, webhookUrl: string) {
         events: ["MESSAGES_UPSERT"],
       },
     },
+    apiKey,
   });
 }
 
-export async function evoSendMedia(instanceName: string, number: string, mediaUrl: string, caption?: string) {
+export async function evoSendMedia(instanceName: string, number: string, mediaUrl: string, caption?: string, apiKey?: string) {
   // Evolution v2: POST /message/sendMedia/{instance}
   const clean = mediaUrl.split("?")[0].toLowerCase();
   const isPdf = clean.endsWith(".pdf");
@@ -161,39 +166,43 @@ export async function evoSendMedia(instanceName: string, number: string, mediaUr
       caption: caption || "",
       ...(isPdf ? { fileName: "catalogo.pdf" } : {}),
     },
+    apiKey,
   });
 }
 
-export async function evoSendText(instanceName: string, number: string, text: string) {
+export async function evoSendText(instanceName: string, number: string, text: string, apiKey?: string) {
   return evo(`/message/sendText/${encodeURIComponent(instanceName)}`, {
     method: "POST",
     json: { number, text },
+    apiKey,
   });
 }
 
-export async function evoSendPresence(instanceName: string, number: string, presence: "composing" | "paused" | "available", delayMs = 1500) {
+export async function evoSendPresence(instanceName: string, number: string, presence: "composing" | "paused" | "available", delayMs = 1500, apiKey?: string) {
   try {
     await evo(`/chat/sendPresence/${encodeURIComponent(instanceName)}`, {
       method: "POST",
       json: { number, presence, delay: delayMs },
+      apiKey,
     });
   } catch {
     // best-effort
   }
 }
 
-export async function evoLogout(instanceName: string) {
-  return evo(`/instance/logout/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
+export async function evoLogout(instanceName: string, apiKey?: string) {
+  return evo(`/instance/logout/${encodeURIComponent(instanceName)}`, { method: "DELETE", apiKey });
 }
 
-export async function evoDelete(instanceName: string) {
-  return evo(`/instance/delete/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
+export async function evoDelete(instanceName: string, apiKey?: string) {
+  return evo(`/instance/delete/${encodeURIComponent(instanceName)}`, { method: "DELETE", apiKey });
 }
 
-export async function evoFetchNumberFromInstance(instanceName: string): Promise<string | null> {
+export async function evoFetchNumberFromInstance(instanceName: string, apiKey?: string): Promise<string | null> {
   try {
     const data: any = await evo(`/instance/fetchInstances?instanceName=${encodeURIComponent(instanceName)}`, {
       method: "GET",
+      apiKey,
     });
     const inst = Array.isArray(data) ? data[0] : data?.[0] ?? data;
     return inst?.instance?.owner || inst?.owner || inst?.number || null;
