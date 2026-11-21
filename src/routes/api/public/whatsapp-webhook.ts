@@ -43,7 +43,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const suppliedToken = new URL(request.url).searchParams.get("t") || request.headers.get("x-webhook-token") || "";
           const { data: inst } = await (supabaseAdmin as any)
             .from("whatsapp_instances")
-            .select("company_id, user_id, instance_name, webhook_token")
+            .select("company_id, user_id, instance_name, webhook_token, api_key")
             .eq("instance_name", instanceName)
             .maybeSingle();
           if (!inst) return new Response("unknown instance", { status: 200 });
@@ -52,6 +52,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           }
           const companyId = (inst as any).company_id as string;
           const userId = (inst as any).user_id as string;
+          const instKey = (inst as any).api_key || undefined;
 
           if (whatsappMessageId) {
             const { data: duplicate } = await (supabaseAdmin as any)
@@ -188,7 +189,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
                 Date.now() - new Date(ultimaSaida.created_at).getTime() < 6 * 60 * 60_000;
               if (!ultimaFoiFora) {
                 try {
-                  await evoSendText(instanceName, number, msgFora);
+                  await evoSendText(instanceName, number, msgFora, instKey);
                   await supabaseAdmin.from("mensagens").insert({
                     company_id: companyId,
                     user_id: userId,
@@ -387,9 +388,9 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             if (!part) continue;
             try {
               const typingMs = Math.min(3000, 1200 + Math.floor(part.length * 35));
-              await evoSendPresence(instanceName, number, "composing", typingMs);
+              await evoSendPresence(instanceName, number, "composing", typingMs, instKey);
               await new Promise((r) => setTimeout(r, typingMs));
-              await evoSendText(instanceName, number, part);
+              await evoSendText(instanceName, number, part, instKey);
               await supabaseAdmin.from("mensagens").insert({
                 company_id: companyId,
                 user_id: userId,
@@ -411,9 +412,9 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           if (slotOcupadoAviso) {
             try {
               const aviso = "Ops, conferi aqui na agenda e esse horário acabou de ser ocupado 😕 Me fala outro dia/horário que eu vejo um livre pra você na hora.";
-              await evoSendPresence(instanceName, number, "composing", 1200);
+              await evoSendPresence(instanceName, number, "composing", 1200, instKey);
               await new Promise((r) => setTimeout(r, 1200));
-              await evoSendText(instanceName, number, aviso);
+              await evoSendText(instanceName, number, aviso, instKey);
               await supabaseAdmin.from("mensagens").insert({
                 company_id: companyId,
                 user_id: userId,
@@ -440,7 +441,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
                 const caption = isDoc
                   ? alvo.nome
                   : `${alvo.nome}${alvo.preco ? ` — R$ ${alvo.preco}` : ""}`;
-                await evoSendMedia(instanceName, number, alvo.midia_url, caption);
+                await evoSendMedia(instanceName, number, alvo.midia_url, caption, instKey);
                 await supabaseAdmin.from("mensagens").insert({
                   company_id: companyId,
                   user_id: userId,
