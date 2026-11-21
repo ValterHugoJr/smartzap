@@ -22,6 +22,70 @@ export function verifyState(state: string): { companyId: string } | null {
   }
 }
 
+async function getGoogleAccessToken(admin: any, gi: any): Promise<string> {
+  let accessToken = gi.access_token as string;
+  if (gi.expiry && new Date(gi.expiry).getTime() < Date.now() + 60_000 && gi.refresh_token) {
+    const tokRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID || "",
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+        refresh_token: gi.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    });
+    const tok = await tokRes.json();
+    if (tok.access_token) {
+      accessToken = tok.access_token;
+      await admin.from("google_integration").update({
+        access_token: accessToken,
+        expiry: new Date(Date.now() + (tok.expires_in ?? 3600) * 1000).toISOString(),
+      }).eq("company_id", gi.company_id);
+    }
+  }
+  return accessToken;
+}
+
+// Lista os períodos ocupados (eventos com hora) da agenda conectada entre duas datas.
+export async function listBusyPeriods(
+  admin: any,
+  companyId: string,
+  timeMinIso: string,
+  timeMaxIso: string,
+): Promise<Array<{ inicio: string; fim: string; titulo: string }>> {
+  const { data: gi } = await admin.from("google_integration").select("*").eq("company_id", companyId).maybeSingle();
+  if (!gi?.conectado) return [];
+  const accessToken = await getGoogleAccessToken(admin, gi);
+  const calendarId = gi.calendar_id || "primary";
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
+  url.searchParams.set("timeMin", timeMinIso);
+  url.searchParams.set("timeMax", timeMaxIso);
+  url.searchParams.set("singleEvents", "true");
+  url.searchParams.set("orderBy", "startTime");
+  url.searchParams.set("maxResults", "250");
+  const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) throw new Error(`Google API: ${res.status}`);
+  const json = await res.json();
+  const out: Array<{ inicio: string; fim: string; titulo: string }> = [];
+  for (const ev of json.items ?? []) {
+    if (ev.status === "cancelled") continue;
+    const inicio = ev.start?.dateTime;
+    const fim = ev.end?.dateTime;
+    if (!inicio || !fim) continue; // ignora eventos de dia inteiro
+    out.push({ inicio, fim, titulo: ev.summary || "Ocupado" });
+  }
+  return out;
+}
+
+// Verdadeiro se o intervalo [inicio, fim) cruza algum evento existente na agenda.
+export async function isSlotBusy(admin: any, companyId: string, inicio: string, fim: string): Promise<boolean> {
+  const busy = await listBusyPeriods(admin, companyId, inicio, fim);
+  const s = new Date(inicio).getTime();
+  const e = new Date(fim).getTime();
+  return busy.some((b) => new Date(b.inicio).getTime() < e && new Date(b.fim).getTime() > s);
+}
+
 // Cria evento no Google Agenda usando os tokens armazenados da empresa.
 // Refresca o access_token se expirou. Insere também na tabela agendamento.
 export async function createCalendarEventForCompany(
@@ -32,27 +96,7 @@ export async function createCalendarEventForCompany(
   const { data: gi } = await admin.from("google_integration").select("*").eq("company_id", companyId).maybeSingle();
   if (!gi?.conectado) throw new Error("Google Agenda não conectado");
 
-  let accessToken = gi.access_token as string;
-  if (gi.expiry && new Date(gi.expiry).getTime() < Date.now() + 60_000 && gi.refresh_token) {
-    const tokRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID || "",
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
-        refresh_token: gi.refresh_token as string,
-        grant_type: "refresh_token",
-      }),
-    });
-    const tok = await tokRes.json();
-    if (tok.access_token) {
-      accessToken = tok.access_token;
-      await admin.from("google_integration").update({
-        access_token: accessToken,
-        expiry: new Date(Date.now() + (tok.expires_in ?? 3600) * 1000).toISOString(),
-      }).eq("company_id", companyId);
-    }
-  }
+  const accessToken = await getGoogleAccessToken(admin, gi);
 
   const calendarId = gi.calendar_id || "primary";
   const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
