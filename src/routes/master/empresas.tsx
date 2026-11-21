@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { LogIn, Pause, Play, CalendarClock, Loader2, KeyRound, Eye, Sparkles, Crown } from "lucide-react";
 import { brand } from "@/config/brand";
-import { listCompanies, suspendCompany, extendTrial, resetCompanyOwnerPassword, getCompanyDetails, setCompanyLifetime } from "@/lib/master.functions";
+import { listCompanies, suspendCompany, extendTrial, resetCompanyOwnerPassword, getCompanyDetails, setCompanyLifetime, setCompanyInstance } from "@/lib/master.functions";
 import { adminGrantCredits } from "@/lib/credits.functions";
 
 export const Route = createFileRoute("/master/empresas")({
@@ -25,9 +25,13 @@ function EmpresasPage() {
   const extend = useServerFn(extendTrial);
   const resetPwd = useServerFn(resetCompanyOwnerPassword);
   const details = useServerFn(getCompanyDetails);
+  const setInst = useServerFn(setCompanyInstance);
   const grantCredits = useServerFn(adminGrantCredits);
   const [detail, setDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [instNome, setInstNome] = useState("");
+  const [instKey, setInstKey] = useState("");
+  const [savingInst, setSavingInst] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [pageSize, setPageSize] = useState(20);
@@ -120,12 +124,29 @@ function EmpresasPage() {
     }
   }
 
+  async function doSaveInst() {
+    if (!detail?.company?.id) return;
+    if (!instNome.trim()) return toast.error("Informe o nome da instância");
+    setSavingInst(true);
+    try {
+      await setInst({ data: { companyId: detail.company.id, instanceName: instNome.trim(), apiKey: instKey.trim() || undefined } });
+      toast.success("Instância salva — a empresa já pode clicar em Conectar WhatsApp");
+      openDetails(detail.company.id);
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao salvar instância");
+    } finally {
+      setSavingInst(false);
+    }
+  }
+
   async function openDetails(companyId: string) {
     setDetail({ loading: true });
     setDetailLoading(true);
     try {
       const r = await details({ data: { companyId } });
       setDetail(r);
+      setInstNome((r as any)?.instance?.instance_name ?? "");
+      setInstKey("");
     } catch (e: any) {
       toast.error(e?.message || "Falha ao carregar detalhes");
       setDetail(null);
@@ -280,6 +301,25 @@ function EmpresasPage() {
               <Section title="Uso">
                 <Field k="Mensagens" v={String(detail.stats.mensagens)} />
                 <Field k="Cards CRM" v={String(detail.stats.cards)} />
+              </Section>
+
+              <Section title="WhatsApp (Evolution — instância pré-criada)">
+                <Field k="Instância atual" v={detail.instance?.instance_name ?? "—"} />
+                <Field k="Status" v={detail.instance?.status ?? "—"} />
+                <Field k="Número" v={detail.instance?.numero ?? "—"} />
+                <Field k="Token da instância" v={detail.instance?.has_key ? "Salvo" : "Não cadastrado"} />
+                <div className="col-span-2 space-y-2 pt-1">
+                  <p className="text-xs text-muted-foreground">
+                    Quando a instância é criada pelo provedor no painel da Evolution, cadastre aqui o nome
+                    exato da instância e o token dela. O DZap passa a usar esse token pra conectar (QR Code),
+                    enviar e receber — sem precisar da chave global do servidor.
+                  </p>
+                  <Input value={instNome} onChange={(e) => setInstNome(e.target.value)} placeholder="Nome exato da instância (ex.: atendezap_67011199e4154829)" />
+                  <Input value={instKey} onChange={(e) => setInstKey(e.target.value)} placeholder={detail.instance?.has_key ? "Token salvo — preencha só se for trocar" : "Token (apikey) da instância"} />
+                  <Button size="sm" onClick={doSaveInst} disabled={savingInst}>
+                    {savingInst ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : null} Salvar instância
+                  </Button>
+                </div>
               </Section>
             </div>
           ) : null}
