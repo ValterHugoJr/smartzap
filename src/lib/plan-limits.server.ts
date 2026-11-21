@@ -29,6 +29,33 @@ function startOfMonthISO(): string {
 export async function getCompanyPlan(companyId: string): Promise<CompanyPlan> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+  // 0) Empresa vitalícia (definida pelo master) → plano Business (topo) sempre,
+  // com todos os recursos e limites do maior plano, sem cobrança.
+  const { data: comp } = await supabaseAdmin
+    .from("company")
+    .select("status_cobranca")
+    .eq("id", companyId)
+    .maybeSingle();
+  if (comp?.status_cobranca === "vitalicio") {
+    const { data: biz } = await supabaseAdmin
+      .from("plan")
+      .select("slug, nome, limite_instancias, limite_mensagens, limite_usuarios, limite_contatos")
+      .eq("slug", "business")
+      .maybeSingle();
+    if (biz) {
+      return {
+        slug: "business",
+        nome: biz.nome || PLAN_LABEL.business,
+        limites: {
+          instancias: 1,
+          usuarios: Number(biz.limite_usuarios ?? 20),
+          contatos: Number(biz.limite_contatos ?? 25000),
+          mensagens: Number(biz.limite_mensagens ?? 30000),
+        },
+      };
+    }
+  }
+
   // 1) Assinatura ativa/trialing → plano vinculado
   const { data: sub } = await supabaseAdmin
     .from("subscription")
