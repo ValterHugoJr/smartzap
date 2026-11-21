@@ -51,12 +51,12 @@ async function handle(request: Request) {
         .select("id").eq("company_id", companyId).eq("numero", numero).limit(1).maybeSingle();
       if (!known) return new Response(JSON.stringify({ error: "Contato não encontrado nesta empresa" }), { status: 403 });
       const { data: inst } = await (supabaseAdmin as any).from("whatsapp_instances")
-        .select("instance_name, status").eq("company_id", companyId).maybeSingle();
+        .select("instance_name, status, api_key").eq("company_id", companyId).maybeSingle();
       if (!inst || inst.status !== "open") return new Response(JSON.stringify({ error: "WhatsApp não conectado" }), { status: 400 });
       if (!userId) return new Response(JSON.stringify({ error: "Token sem owner; recrie o token." }), { status: 400 });
       try {
         const { evoSendText } = await import("@/lib/evolution.server");
-        await evoSendText(inst.instance_name, numero, texto);
+        await evoSendText(inst.instance_name, numero, texto, (inst as any)?.api_key || undefined);
         await (supabaseAdmin as any).from("mensagens").insert({
           company_id: companyId, user_id: userId, numero, direcao: "saida", autor: "api", texto,
         });
