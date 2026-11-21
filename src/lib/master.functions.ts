@@ -163,6 +163,50 @@ export const extendTrial = createServerFn({ method: "POST" })
     return { trial_ate: next.toISOString() };
   });
 
+export const setCompanyInstance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { companyId: string; instanceName: string; apiKey?: string }) => d)
+  .handler(async ({ context, data }) => {
+    await assertSuper(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const nome = (data.instanceName || "").trim();
+    if (!nome) throw new Error("Nome da instância é obrigatório");
+    const key = (data.apiKey || "").trim();
+    const { data: existing } = await supabaseAdmin
+      .from("whatsapp_instances")
+      .select("id")
+      .eq("company_id", data.companyId)
+      .maybeSingle();
+    if (existing) {
+      const patch: any = { instance_name: nome };
+      if (key) patch.api_key = key;
+      const { error } = await supabaseAdmin
+        .from("whatsapp_instances")
+        .update(patch)
+        .eq("company_id", data.companyId);
+      if (error) throw error;
+    } else {
+      const { data: owner } = await supabaseAdmin
+        .from("company_user")
+        .select("user_id")
+        .eq("company_id", data.companyId)
+        .eq("role", "owner")
+        .limit(1)
+        .maybeSingle();
+      if (!owner) throw new Error("Empresa sem usuário responsável");
+      const { error } = await supabaseAdmin.from("whatsapp_instances").insert({
+        company_id: data.companyId,
+        user_id: (owner as any).user_id,
+        instance_name: nome,
+        api_key: key || null,
+        status: "disconnected",
+        webhook_token: crypto.randomUUID(),
+      } as any);
+      if (error) throw error;
+    }
+    return { ok: true };
+  });
+
 export const createCompanyWithOwner = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: {
@@ -396,10 +440,25 @@ export const getCompanyDetails = createServerFn({ method: "POST" })
       supabaseAdmin.from("crm_cards").select("id", { count: "exact", head: true }).eq("company_id", data.companyId),
     ]);
 
+    const { data: instRow } = await supabaseAdmin
+      .from("whatsapp_instances")
+      .select("instance_name, status, numero, api_key")
+      .eq("company_id", data.companyId)
+      .maybeSingle();
+    const instance = instRow
+      ? {
+          instance_name: (instRow as any).instance_name,
+          status: (instRow as any).status,
+          numero: (instRow as any).numero,
+          has_key: !!(instRow as any).api_key,
+        }
+      : null;
+
     return {
       company,
       members: membersFull,
       subscription,
+      instance,
       stats: {
         mensagens: msgCount ?? 0,
         contatos: contactsCount ?? 0,
