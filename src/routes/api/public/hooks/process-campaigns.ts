@@ -34,7 +34,7 @@ export const Route = createFileRoute("/api/public/hooks/process-campaigns")({
             // Carrega instância WhatsApp da empresa
             const { data: inst } = await supabaseAdmin
               .from("whatsapp_instances")
-              .select("instance_name, status")
+              .select("instance_name, status, api_key")
               .eq("company_id", c.company_id)
               .maybeSingle();
             if (!inst || inst.status !== "open") {
@@ -65,7 +65,7 @@ export const Route = createFileRoute("/api/public/hooks/process-campaigns")({
             for (const t of pending as any[]) {
               try {
                 const texto = String(c.mensagem || "").replace(/\{\{nome\}\}/gi, t.contato_nome || "");
-                await evoSendText(inst.instance_name, t.contato_numero, texto);
+                await evoSendText(inst.instance_name, t.contato_numero, texto, (inst as any)?.api_key || undefined);
                 await supabaseAdmin.from("campaign_target").update({
                   status: "enviado",
                   enviado_em: new Date().toISOString(),
