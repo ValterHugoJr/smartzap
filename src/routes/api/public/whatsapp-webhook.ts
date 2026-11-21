@@ -265,6 +265,37 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             .eq("company_id", companyId)
             .maybeSingle();
 
+          // Disponibilidade real: horários ocupados na Google Agenda (próximos 7 dias)
+          let agendaOcupada: string | undefined;
+          if ((cfg as any)?.agendamento_ativo && googleIntegration?.conectado) {
+            try {
+              const { listBusyPeriods } = await import("@/lib/google.server");
+              const nowA = new Date();
+              const busy = await listBusyPeriods(
+                supabaseAdmin,
+                companyId,
+                nowA.toISOString(),
+                new Date(nowA.getTime() + 7 * 24 * 3600_000).toISOString(),
+              );
+              if (busy.length) {
+                const fmtDia = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "short", day: "2-digit", month: "2-digit" });
+                const fmtHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+                const byDay = new Map<string, string[]>();
+                for (const b of busy.slice(0, 60)) {
+                  const d = fmtDia.format(new Date(b.inicio));
+                  const arr = byDay.get(d) ?? [];
+                  arr.push(`${fmtHora.format(new Date(b.inicio))}–${fmtHora.format(new Date(b.fim))}`);
+                  byDay.set(d, arr);
+                }
+                agendaOcupada = Array.from(byDay.entries()).map(([d, hs]) => `${d}: ${hs.join(", ")}`).join("\n");
+              } else {
+                agendaOcupada = "(nenhum horário ocupado nos próximos 7 dias)";
+              }
+            } catch (e: any) {
+              console.error("[agenda-ocupada]", e?.message);
+            }
+          }
+
           const responderEmPartes = cfg?.responder_em_partes ?? true;
           const system = buildSystemPrompt(cfg ?? {}, {
             responderEmPartes,
@@ -273,6 +304,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             produtos,
             stages: stages.map((s) => ({ nome: s.nome, tipo: s.tipo })),
             googleConectado: !!googleIntegration?.conectado,
+            agendaOcupada,
           });
 
           const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -328,16 +360,23 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const { parts, stage, agendar, midia } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
           const finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
 
-          // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...]
+          // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...] —
+          // mas ANTES confere na agenda real se o horário está livre (anti duplo agendamento).
+          let slotOcupadoAviso = false;
           if (agendar && googleIntegration?.conectado) {
             try {
-              const { createCalendarEventForCompany } = await import("@/lib/google.server");
-              await createCalendarEventForCompany(supabaseAdmin, companyId, {
-                titulo: agendar.titulo,
-                inicio: agendar.inicio,
-                fim: agendar.fim,
-                descricao: `Agendado via WhatsApp — ${pushName || number}`,
-              });
+              const { createCalendarEventForCompany, isSlotBusy } = await import("@/lib/google.server");
+              const ocupado = await isSlotBusy(supabaseAdmin, companyId, agendar.inicio, agendar.fim);
+              if (ocupado) {
+                slotOcupadoAviso = true;
+              } else {
+                await createCalendarEventForCompany(supabaseAdmin, companyId, {
+                  titulo: agendar.titulo,
+                  inicio: agendar.inicio,
+                  fim: agendar.fim,
+                  descricao: `Agendado via WhatsApp — ${pushName || number}`,
+                });
+              }
             } catch (e: any) {
               console.error("[agendar]", e?.message);
             }
@@ -365,6 +404,27 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               }
             } catch (e: any) {
               console.error("[send]", e?.message);
+            }
+          }
+
+          // Se o horário pedido estava ocupado, avisa o cliente (o evento NÃO foi criado)
+          if (slotOcupadoAviso) {
+            try {
+              const aviso = "Ops, conferi aqui na agenda e esse horário acabou de ser ocupado 😕 Me fala outro dia/horário que eu vejo um livre pra você na hora.";
+              await evoSendPresence(instanceName, number, "composing", 1200);
+              await new Promise((r) => setTimeout(r, 1200));
+              await evoSendText(instanceName, number, aviso);
+              await supabaseAdmin.from("mensagens").insert({
+                company_id: companyId,
+                user_id: userId,
+                numero: number,
+                contato_nome: pushName ?? null,
+                direcao: "saida",
+                autor: "ia",
+                texto: aviso,
+              });
+            } catch (e: any) {
+              console.error("[agenda-ocupada-aviso]", e?.message);
             }
           }
 
