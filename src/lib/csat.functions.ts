@@ -30,13 +30,13 @@ export const sendCsat = createServerFn({ method: "POST" })
       .maybeSingle();
     if (error || !row) throw new Error(error?.message ?? "Falha ao registrar CSAT.");
 
-    const { data: inst } = await supabase.from("whatsapp_instances").select("instance_name,status").eq("company_id", companyId).maybeSingle();
+    const { data: inst } = await supabase.from("whatsapp_instances").select("instance_name,status,api_key").eq("company_id", companyId).maybeSingle();
     if (inst && inst.status === "open") {
       const link = `${appOrigin()}/csat/${row.token}`;
       const texto = `Olá! Como foi nosso atendimento? Avalie em 1 minuto: ${link}`;
       try {
         const { evoSendText } = await import("./evolution.server");
-        await evoSendText(inst.instance_name, numero, texto);
+        await evoSendText(inst.instance_name, numero, texto, (inst as any)?.api_key || undefined);
         await supabase.from("mensagens").insert({
           company_id: companyId, user_id: userId, numero, contato_nome: data.contatoNome ?? null,
           direcao: "saida", autor: "sistema", texto,
