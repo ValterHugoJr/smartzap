@@ -45,19 +45,20 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
 
     const { data: existing } = await (supabase as any)
       .from("whatsapp_instances")
-      .select("instance_name,status,numero,webhook_token")
+      .select("instance_name,status,numero,webhook_token,api_key")
       .eq("company_id", companyId)
       .maybeSingle();
+    const instKey = (existing as any)?.api_key || undefined;
     const instanceName = existing?.instance_name || deriveInstanceName(companyId);
     const webhookToken = existing?.webhook_token || crypto.randomUUID();
     const webhookUrl = buildWebhookUrl(webhookToken);
     if (existing?.instance_name) {
       try {
-        const s = await evoState(existing.instance_name);
+        const s = await evoState(existing.instance_name, instKey);
         const existingState = s?.instance?.state || (s as any)?.state;
         if (existingState === "open") {
           if (webhookUrl) {
-            try { await evoSetWebhook(existing.instance_name, webhookUrl); } catch (e) { console.warn("[evolution.setWebhook]", e); }
+            try { await evoSetWebhook(existing.instance_name, webhookUrl, instKey); } catch (e) { console.warn("[evolution.setWebhook]", e); }
           }
           if (existing.status !== "connected") {
             await supabase
@@ -77,7 +78,9 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
         { onConflict: "company_id" },
       );
 
-    try {
+    // Instância pré-criada (com token próprio): NÃO tenta criar pela API —
+    // a criação é feita pelo provedor no painel dele; aqui só conecta.
+    if (!instKey) try {
       await evoCreateInstance(instanceName, webhookUrl);
     } catch (e: any) {
       const msg = String(e?.message || "");
@@ -86,7 +89,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     }
 
     if (webhookUrl) {
-      try { await evoSetWebhook(instanceName, webhookUrl); } catch (e) { console.warn("[evolution.setWebhook]", e); }
+      try { await evoSetWebhook(instanceName, webhookUrl, instKey); } catch (e) { console.warn("[evolution.setWebhook]", e); }
     }
 
     let qrBase64: string | null = null;
@@ -94,7 +97,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     let lastQrError: unknown = null;
     for (let i = 0; i < 6; i++) {
       try {
-        const qr = await evoGetQr(instanceName);
+        const qr = await evoGetQr(instanceName, instKey);
         qrBase64 = qr.qrBase64;
         code = qr.code;
         if (qrBase64 || code) break;
@@ -108,7 +111,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
 
     let state: string | undefined;
     try {
-      const s = await evoState(instanceName);
+      const s = await evoState(instanceName, instKey);
       state = s?.instance?.state || (s as any)?.state;
     } catch {}
 
@@ -124,15 +127,16 @@ export const checkWhatsappStatus = createServerFn({ method: "POST" })
 
     const { data: row } = await (supabase as any)
       .from("whatsapp_instances")
-      .select("instance_name,status,numero,webhook_token,webhook_configured_at")
+      .select("instance_name,status,numero,webhook_token,webhook_configured_at,api_key")
       .eq("company_id", companyId)
       .maybeSingle();
     if (!row) return { status: "disconnected", state: null, numero: null, qrBase64: null, code: null };
 
+    const instKey = (row as any)?.api_key || undefined;
     let state: string | null = null;
     let stateError = false;
     try {
-      const s = await evoState(row.instance_name);
+      const s = await evoState(row.instance_name, instKey);
       state = s?.instance?.state || (s as any)?.state || null;
     } catch (e) {
       stateError = true;
@@ -158,13 +162,13 @@ export const checkWhatsappStatus = createServerFn({ method: "POST" })
 
     let numero: string | null = row.numero ?? null;
     if (newStatus === "connected" && !numero) {
-      try { numero = await evoFetchNumberFromInstance(row.instance_name); } catch {}
+      try { numero = await evoFetchNumberFromInstance(row.instance_name, instKey); } catch {}
     }
     if (newStatus === "connected" && row.webhook_token && !row.webhook_configured_at) {
       const webhookUrl = buildWebhookUrl(row.webhook_token);
       if (webhookUrl) {
         try {
-          await evoSetWebhook(row.instance_name, webhookUrl);
+          await evoSetWebhook(row.instance_name, webhookUrl, instKey);
           await supabase.from("whatsapp_instances").update({ webhook_configured_at: new Date().toISOString() } as any).eq("company_id", companyId);
         } catch (e) { console.warn("[evolution.setWebhook]", e); }
       }
@@ -188,11 +192,11 @@ export const disconnectWhatsapp = createServerFn({ method: "POST" })
     const { evoLogout } = await import("./evolution.server");
     const { data: row } = await supabase
       .from("whatsapp_instances")
-      .select("instance_name")
+      .select("instance_name,api_key")
       .eq("company_id", companyId)
       .maybeSingle();
     if (row) {
-      try { await evoLogout(row.instance_name); } catch (e) { console.warn("[evolution.logout]", e); }
+      try { await evoLogout(row.instance_name, (row as any)?.api_key || undefined); } catch (e) { console.warn("[evolution.logout]", e); }
       await supabase
         .from("whatsapp_instances")
         .update({ status: "disconnected" })
@@ -208,7 +212,7 @@ export const sendWhatsappText = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const companyId = await resolveCompanyId(supabase, userId);
     const { data: inst } = await supabase
-      .from("whatsapp_instances").select("instance_name,status").eq("company_id", companyId).maybeSingle();
+      .from("whatsapp_instances").select("instance_name,status,api_key").eq("company_id", companyId).maybeSingle();
     if (!inst?.instance_name) throw new Error("WhatsApp não conectado");
     const { data: recentInbound } = await supabase
       .from("mensagens")
@@ -235,7 +239,7 @@ export const sendWhatsappText = createServerFn({ method: "POST" })
     const { assertWithinLimit } = await import("./plan-limits.server");
     await assertWithinLimit(companyId, "mensagens");
     const { evoSendText } = await import("./evolution.server");
-    try { await evoSendText(inst.instance_name, data.numero, data.texto); }
+    try { await evoSendText(inst.instance_name, data.numero, data.texto, (inst as any)?.api_key || undefined); }
     catch (e: any) { throw new Error(`Falha ao enviar: ${e?.message ?? e}`); }
     const { error } = await supabase.from("mensagens").insert({
       company_id: companyId, user_id: userId, numero: data.numero,
