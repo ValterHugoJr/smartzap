@@ -584,6 +584,7 @@ export type Database = {
           onboarding_completed: boolean
           onboarding_step: number
           pais: string | null
+          plano_vitalicio: string | null
           porte: string | null
           primary_color: string
           razao_social: string | null
@@ -622,6 +623,7 @@ export type Database = {
           onboarding_completed?: boolean
           onboarding_step?: number
           pais?: string | null
+          plano_vitalicio?: string | null
           porte?: string | null
           primary_color?: string
           razao_social?: string | null
@@ -660,6 +662,7 @@ export type Database = {
           onboarding_completed?: boolean
           onboarding_step?: number
           pais?: string | null
+          plano_vitalicio?: string | null
           porte?: string | null
           primary_color?: string
           razao_social?: string | null
