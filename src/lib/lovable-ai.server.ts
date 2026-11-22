@@ -97,7 +97,10 @@ async function anthropicChat(key: string, model: string, messages: ChatMsg[]): P
 }
 
 async function googleDirectChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
-  const directModel = model.replace(/^google\//, "");
+  let directModel = model.replace(/^google\//, "");
+  // O gemini-2.5-flash foi encerrado pra contas novas (404 do Google);
+  // qualquer variação 2.5 cai pro modelo atual sugerido pelo Google.
+  if (directModel.startsWith("gemini-2.5")) directModel = "gemini-3.8-flash";
   const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
