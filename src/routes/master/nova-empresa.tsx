@@ -12,7 +12,7 @@ import { brand } from "@/config/brand";
 import { createCompanyWithOwner, listPlansBasic } from "@/lib/master.functions";
 
 export const Route = createFileRoute("/master/nova-empresa")({
-  head: () => ({ meta: [{ title: `${brand.name} — Nova empresa` }] }),
+  head: () => ({ meta: [{ title: `${brand.name} — Cadastrar empresa` }] }),
   component: NovaEmpresa,
 });
 
@@ -65,7 +65,7 @@ function NovaEmpresa() {
   return (
     <div className="space-y-5 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Nova empresa</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Cadastrar empresa</h1>
         <p className="text-sm text-muted-foreground">
           Cria a empresa, o usuário responsável e libera o plano com período de teste.
           Ao fim do trial o cliente precisa pagar para continuar — ou crie no modo
