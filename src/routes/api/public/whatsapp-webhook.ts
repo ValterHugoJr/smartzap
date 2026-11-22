@@ -353,6 +353,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               model: modelChoice,
               openaiKey: (cfg as any)?.openai_api_key || "",
               anthropicKey: (cfg as any)?.anthropic_api_key || "",
+              geminiKey: (cfg as any)?.gemini_api_key || "",
             });
           } catch (e: any) {
             console.error("[ai]", e?.message);
