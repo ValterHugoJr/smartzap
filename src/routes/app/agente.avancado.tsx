@@ -219,9 +219,8 @@ function AgentePage() {
         <div>
           <Tabs defaultValue="modelo">
             <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0 mb-4">
-              {[["modelo","Modelo IA"],["negocio","Negócio"],["produtos","Produtos"],["ofertas","Ofertas"],["vendas","Vendas"],
-                ["suporte","Suporte"],["posvenda","Pós-venda"],["personalidade","Personalidade"],
-                ["agendamento","Agendamento"],["regras","Regras"]].map(([k,l]) => (
+              {[["modelo","Modelo IA"],["agendamento","Agendamento"],["negocio","Negócio"],["produtos","Produtos"],["ofertas","Ofertas"],["vendas","Vendas"],
+                ["suporte","Suporte"],["posvenda","Pós-venda"],["personalidade","Personalidade"],["regras","Regras"]].map(([k,l]) => (
                 <TabsTrigger key={k} value={k} className="text-sm">{l}</TabsTrigger>
               ))}
             </TabsList>
