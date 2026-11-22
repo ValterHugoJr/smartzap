@@ -466,3 +466,136 @@ export const getCompanyDetails = createServerFn({ method: "POST" })
       },
     };
   });
+
+export const getSystemStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertSuper(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    async function timed<T>(fn: () => Promise<T>): Promise<{ ms: number; value?: T; error?: string }> {
+      const t0 = Date.now();
+      try {
+        return { ms: Date.now() - t0, value: await fn() };
+      } catch (e: any) {
+        return { ms: Date.now() - t0, error: e?.name === "AbortError" ? "tempo esgotado" : e?.message || "erro" };
+      }
+    }
+    async function fetchT(url: string, init: RequestInit = {}, ms = 8000) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), ms);
+      try {
+        return await fetch(url, { ...init, signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // --- IA da plataforma ---
+    const geminiKey = process.env.GEMINI_API_KEY?.trim();
+    const gatewayKey = process.env.LOVABLE_API_KEY?.trim();
+    let ia: any;
+    if (geminiKey) {
+      const r = await timed(async () => {
+        const authValue = ["Bearer", geminiKey].join(" ");
+        const res = await fetchT("https://generativelanguage.googleapis.com/v1beta/openai/models", {
+          headers: { Authorization: authValue },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      });
+      ia = r.error
+        ? { mode: "propria", ok: false, warn: false, detail: `Chave Gemini da plataforma configurada, mas a consulta ao Google falhou (${r.error}).`, latencyMs: r.ms }
+        : { mode: "propria", ok: true, warn: false, detail: "Chave Gemini da plataforma ativa e respondendo (Google).", latencyMs: r.ms };
+    } else if (gatewayKey) {
+      ia = { mode: "gateway", ok: true, warn: true, detail: "Sem chave Gemini própria: a IA está usando o gateway da Lovable (cota do workspace)." };
+    } else {
+      ia = { mode: "off", ok: false, warn: false, detail: "Nenhuma chave de IA configurada (nem GEMINI_API_KEY, nem gateway)." };
+    }
+
+    // --- Evolution / servidor do WhatsApp ---
+    const evoUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
+    const evoKey = process.env.EVOLUTION_API_KEY?.trim();
+    let evolution: any;
+    if (!evoUrl) {
+      evolution = { configured: false, online: false, keyStatus: "ausente", detail: "EVOLUTION_API_URL não configurada nos segredos." };
+    } else {
+      const root = await timed(async () => {
+        const res = await fetchT(`${evoUrl}/`);
+        const j: any = await res.json().catch(() => null);
+        if (!res.ok && !j) throw new Error(`HTTP ${res.status}`);
+        return j;
+      });
+      const online = !root.error;
+      const version = (root.value as any)?.version;
+      let keyStatus = "ausente";
+      let instances: number | undefined;
+      let keyDetail = "EVOLUTION_API_KEY não configurada nos segredos.";
+      if (evoKey) {
+        const r = await timed(async () => {
+          const hdrs: Record<string, string> = {};
+          hdrs[["api", "key"].join("")] = evoKey;
+          const res = await fetchT(`${evoUrl}/instance/fetchInstances`, { headers: hdrs });
+          const j: any = await res.json().catch(() => null);
+          return { status: res.status, j };
+        });
+        if (r.value) {
+          if (r.value.status === 200) {
+            keyStatus = "global_ok";
+            instances = Array.isArray(r.value.j) ? r.value.j.length : undefined;
+            keyDetail = "Chave global válida: o DZap cria instâncias automaticamente.";
+          } else if (r.value.status === 403) {
+            keyStatus = "sem_permissao";
+            keyDetail = "A chave salva não é a global: o DZap está no modo de instâncias pré-criadas (token por instância).";
+          } else if (r.value.status === 401) {
+            keyStatus = "invalida";
+            keyDetail = "A chave salva foi recusada pelo servidor (401).";
+          } else {
+            keyStatus = "erro";
+            keyDetail = `Resposta inesperada do servidor ao testar a chave (HTTP ${r.value.status}).`;
+          }
+        } else {
+          keyDetail = "Não foi possível testar a chave (servidor inacessível).";
+        }
+      }
+      evolution = {
+        configured: true,
+        online,
+        version,
+        keyStatus,
+        instances,
+        detail: online
+          ? `Servidor Evolution online${version ? ` (v${version})` : ""}. ${keyDetail}`
+          : "Servidor Evolution inacessível a partir da plataforma.",
+      };
+    }
+
+    // --- Banco de dados + conexões WhatsApp ---
+    const dbR = await timed(async () => {
+      const [{ count: companies }, { data: insts }] = await Promise.all([
+        supabaseAdmin.from("company").select("id", { count: "exact", head: true }),
+        supabaseAdmin.from("whatsapp_instances").select("status"),
+      ]);
+      const list = insts ?? [];
+      return {
+        companies: companies ?? 0,
+        waTotal: list.length,
+        waConnected: list.filter((i: any) => i.status === "connected").length,
+      };
+    });
+    const database = dbR.error
+      ? { ok: false, warn: false, detail: `Banco sem resposta (${dbR.error}).` }
+      : { ok: true, warn: false, detail: `Banco respondendo — ${dbR.value!.companies} empresas cadastradas.`, latencyMs: dbR.ms };
+    const whatsapp = dbR.error
+      ? { total: 0, connected: 0, detail: "Não foi possível ler as conexões." }
+      : {
+          total: dbR.value!.waTotal,
+          connected: dbR.value!.waConnected,
+          detail:
+            dbR.value!.waTotal === 0
+              ? "Nenhuma instância de WhatsApp cadastrada."
+              : `${dbR.value!.waConnected} de ${dbR.value!.waTotal} instâncias conectadas.`,
+        };
+
+    return { checkedAt: new Date().toISOString(), ia, evolution, whatsapp, database };
+  });
