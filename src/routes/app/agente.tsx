@@ -11,12 +11,14 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { Bot, Loader2, Save, Send, Sparkles, Wand2, ChevronDown, Settings2, RefreshCcw, HelpCircle, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Bot, Loader2, Save, Send, Sparkles, Wand2, ChevronDown, Settings2, RefreshCcw, HelpCircle, ArrowLeft, CheckCircle2, Calendar, Link2 } from "lucide-react";
 import { brand } from "@/config/brand";
 import { buildSystemPrompt } from "@/lib/ai-prompt";
 import { testAiReply } from "@/lib/evolution.functions";
 import { generateAgentConfig, analyzeBusinessBrief, type BriefQuestion } from "@/lib/agent-ai.functions";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { usePlanFeatures } from "@/hooks/use-plan-features";
+import { startGoogleOAuth, disconnectGoogle } from "@/lib/google.functions";
 
 export const Route = createFileRoute("/app/agente")({
   head: () => ({ meta: [{ title: `${brand.name} — Agente IA` }] }),
@@ -60,6 +62,18 @@ function AgentePage() {
   const [palavraDespausar, setPalavraDespausar] = useState("/despausar");
   const [responderEmPartes, setResponderEmPartes] = useState(true);
 
+  // Agendamento / Google Agenda
+  const plan = usePlanFeatures();
+  const allowGoogleCal = plan.features.googleCalendar;
+  const gStart = useServerFn(startGoogleOAuth);
+  const gDisc = useServerFn(disconnectGoogle);
+  const [google, setGoogle] = useState<any>(null);
+  const [agendamentoAtivo, setAgendamentoAtivo] = useState(false);
+  const [servicosAgendaveis, setServicosAgendaveis] = useState("");
+  const [duracaoPadrao, setDuracaoPadrao] = useState("30 min");
+  const [antecedenciaMin, setAntecedenciaMin] = useState("");
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState("");
+
   const [testMsg, setTestMsg] = useState("Oi, vocês entregam aqui?");
   const [testReply, setTestReply] = useState<string[]>([]);
   const [testing, setTesting] = useState(false);
@@ -67,6 +81,15 @@ function AgentePage() {
   async function reload() {
     if (!companyId) return;
     const { data } = await supabase.from("agent_config").select("*").eq("company_id", companyId).maybeSingle();
+    const { data: g } = await supabase.from("google_integration").select("company_id,email,conectado,calendar_id,expiry,updated_at").eq("company_id", companyId).maybeSingle();
+    setGoogle(g);
+    if (data) {
+      setAgendamentoAtivo(!!data.agendamento_ativo);
+      setServicosAgendaveis(data.servicos_agendaveis || "");
+      setDuracaoPadrao(data.duracao_padrao || "30 min");
+      setAntecedenciaMin(data.antecedencia_min || "");
+      setHorariosDisponiveis(data.horarios_disponiveis || "");
+    }
     if (data && data.nome_agente && data.nome_agente.trim() && data.sobre_empresa) {
       setHasConfig(true);
       setCfg(data);
@@ -143,6 +166,11 @@ function AgentePage() {
       palavra_pausar: palavraPausar,
       palavra_despausar: palavraDespausar,
       responder_em_partes: responderEmPartes,
+      agendamento_ativo: agendamentoAtivo,
+      servicos_agendaveis: servicosAgendaveis,
+      duracao_padrao: duracaoPadrao,
+      antecedencia_min: antecedenciaMin,
+      horarios_disponiveis: horariosDisponiveis,
     };
     const { user_id: _u, company_id: _c, updated_at: _ua, ...rest } = payload;
     const { error } = await supabase.from("agent_config").upsert(
@@ -162,6 +190,19 @@ function AgentePage() {
       setTestReply(r.parts);
     } catch (e: any) { toast.error(e?.message || "Falha"); }
     finally { setTesting(false); }
+  }
+  
+  async function connectGoogle() {
+    try {
+      const r: any = await gStart({});
+      if (!r.ok) return toast.error(r.error);
+      window.location.href = r.url;
+    } catch (e: any) { toast.error(e?.message || "Falha"); }
+  }
+
+  async function disconnectG() {
+    
+    await gDisc({}); toast.success("Google desconectado"); reload();
   }
 
   if (loading) return <div className="grid place-items-center h-40 text-muted-foreground"><Loader2 className="animate-spin" /></div>;
@@ -328,7 +369,50 @@ function AgentePage() {
             <SummaryRow label="Pode fazer" value={cfg?.pode_fazer} multiline />
             <SummaryRow label="Não pode fazer" value={cfg?.nao_pode_fazer} multiline />
           </Section>
-
+                    
+          <Section title="Agendamento" icon={<Calendar className="size-3.5" />}>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-4">
+                      <div className="flex items-start gap-3">
+                      <Calendar className="size-5 text-[var(--brand-text)] mt-0.5" />
+                        <div className="flex-1">
+                        <div className="font-semibold flex items-center gap-2">
+                        Google Agenda
+                          {google?.conectado && <span className="text-[10px] bg-[var(--brand)]/15 text-[var(--brand-text)] px-1.5 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 className="size-3" />Conectado}</span>}
+                    </div>
+                          {google?.email && <div className="text-xs text-muted-foreground">{google.email}</div>}
+                          <p className="text-xs text-muted-foreground mt-1">Permite que a IA marque eventos automaticamente, consultando os horários livres.</p>
+                </div>
+                    {!allowGoogleCal ? (
+                  <Link to="/app/checkout" className="text-xs underline text-muted-foreground">Disponível no Pro</Link>
+              ) : google?.conectado
+                                ? <Button size="sm" variant="outline" onClick={disconnectG}>Desconectar</Button>
+                                  : <Button size="sm" onClick={connectGoogle}><Link2 className="size-3.5 mr-1" />Conectar</Button>}
+                      </div>
+                      </div>
+            <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-3">
+            <span className="text-sm font-medium">Agendamento ativo</span>
+            <Switch checked={agendamentoAtivo} onCheckedChange={setAgendamentoAtivo} />
+            </div>
+            <div className="space-y-1.5">
+            <Label>Serviços agendáveis</Label>
+            <Textarea value={servicosAgendaveis} onChange={(e) => setServicosAgendaveis(e.target.value)} rows={2} placeholder="Ex: consulta, avaliação, orçamento…" />
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Duração padrão</Label>
+                <Input value={duracaoPadrao} onChange={(e) => setDuracaoPadrao(e.target.value)} placeholder="30 min" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Antecedência mínima</Label>
+                <Input value={antecedenciaMin} onChange={(e) => setAntecedenciaMin(e.target.value)} placeholder="Ex: 2 horas" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+            <Label>Horários disponíveis</Label>
+            <Textarea value={horariosDisponiveis} onChange={(e) => setHorariosDisponiveis(e.target.value)} rows={2} placeholder="Ex: seg a sex, 9h às 18h" />
+            </div>
+          </Section>
+          
           <Collapsible>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
               <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-[var(--panel-2)] transition">
