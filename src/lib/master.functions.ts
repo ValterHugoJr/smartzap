@@ -490,9 +490,12 @@ export const getSystemStatus = createServerFn({ method: "POST" })
         clearTimeout(timer);
       }
     }
+    const { getPlatformConfig } = await import("@/lib/platform-config.server");
+    const pcfg = await getPlatformConfig();
+    
 
     // --- IA da plataforma ---
-    const geminiKey = process.env.GEMINI_API_KEY?.trim();
+    const geminiKey = pcfg.geminiKey.trim();
     const gatewayKey = process.env.LOVABLE_API_KEY?.trim();
     let ia: any;
     if (geminiKey) {
@@ -514,11 +517,11 @@ export const getSystemStatus = createServerFn({ method: "POST" })
     }
 
     // --- Evolution / servidor do WhatsApp ---
-    const evoUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
-    const evoKey = process.env.EVOLUTION_API_KEY?.trim();
+    const evoUrl = pcfg.evolutionUrl;
+    const evoKey = pcfg.evolutionKey.trim();
     let evolution: any;
     if (!evoUrl) {
-      evolution = { configured: false, online: false, keyStatus: "ausente", detail: "EVOLUTION_API_URL não configurada nos segredos." };
+      evolution = { configured: false, online: false, keyStatus: "ausente", detail: "URL da Evolution não configurada (nem no sistema, nem nos segredos)." };
     } else {
       const root = await timed(async () => {
         const res = await fetchT(`${evoUrl}/`);
@@ -530,7 +533,7 @@ export const getSystemStatus = createServerFn({ method: "POST" })
       const version = (root.value as any)?.version;
       let keyStatus = "ausente";
       let instances: number | undefined;
-      let keyDetail = "EVOLUTION_API_KEY não configurada nos segredos.";
+      let keyDetail = "Chave da Evolution não configurada.";
       if (evoKey) {
         const r = await timed(async () => {
           const hdrs: Record<string, string> = {};
@@ -598,4 +601,55 @@ export const getSystemStatus = createServerFn({ method: "POST" })
         };
 
     return { checkedAt: new Date().toISOString(), ia, evolution, whatsapp, database };
+  });
+
+export const getPlatformIntegrations = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertSuper(context.supabase, context.userId);
+  const { getPlatformConfig } = await import("@/lib/platform-config.server");
+    const cfg = await getPlatformConfig();
+    const hint = (v: string) => (v ? `•••• ${v.slice(-4)}` : "");
+    return {
+      evolutionUrl: { value: cfg.evolutionUrl, source: cfg.sources.evolutionUrl },
+      evolutionKey: { configured: !!cfg.evolutionKey, hint: hint(cfg.evolutionKey), source: cfg.sources.evolutionKey },
+      geminiKey: { configured: !!cfg.geminiKey, hint: hint(cfg.geminiKey), source: cfg.sources.geminiKey },
+      googleClientId: { value: cfg.googleClientId, source: cfg.sources.googleClientId },
+      googleClientSecret: { configured: !!cfg.googleClientSecret, hint: hint(cfg.googleClientSecret), source: cfg.sources.googleClientSecret },
+    };
+  });
+
+const INTEGRATION_FIELDS = ["evolution_api_url", "evolution_api_key", "gemini_api_key", "google_client_id", "google_client_secret"] as const;
+
+export const setPlatformIntegrations = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: {
+    evolution_api_url?: string;
+    evolution_api_key?: string;
+    gemini_api_key?: string;
+    google_client_id?: string;
+    google_client_secret?: string;
+    clear?: string[];
+  }) => d)
+  .handler(async ({ context, data }) => {
+    await assertSuper(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const patch: Record<string, string> = {};
+    for (const f of INTEGRATION_FIELDS) {
+      const v = (data as any)?.[f];
+      if (typeof v === "string" && v.trim()) patch[f] = v.trim();
+    }
+    for (const f of data?.clear ?? []) {
+      if ((INTEGRATION_FIELDS as readonly string[]).includes(f)) patch[f] = "";
+    }
+    if (Object.keys(patch).length) {
+      const { error } = await supabaseAdmin
+        .from("app_config")
+        .update({ ...patch, updated_at: new Date().toISOString() } as any)
+        .eq("id", true);
+      if (error) throw error;
+    }
+    const { clearPlatformConfigCache } = await import("@/lib/platform-config.server");
+    clearPlatformConfigCache();
+    return { ok: true as const };
   });
