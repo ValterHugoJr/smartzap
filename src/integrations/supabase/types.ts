@@ -72,7 +72,6 @@ export type Database = {
           ai_provider: string
           antecedencia_min: string
           anthropic_api_key: string
-          gemini_api_key: string
           apresentacao: string
           assinar_mensagens: boolean | null
           chamar_por_nome: boolean | null
@@ -89,6 +88,7 @@ export type Database = {
           foco_atendimento: string | null
           formalidade: number
           formas_pagamento: string
+          gemini_api_key: string
           horarios_atendimento: Json
           horarios_disponiveis: string
           idioma: string | null
@@ -135,7 +135,6 @@ export type Database = {
           ai_provider?: string
           antecedencia_min?: string
           anthropic_api_key?: string
-          gemini_api_key?: string
           apresentacao?: string
           assinar_mensagens?: boolean | null
           chamar_por_nome?: boolean | null
@@ -152,6 +151,7 @@ export type Database = {
           foco_atendimento?: string | null
           formalidade?: number
           formas_pagamento?: string
+          gemini_api_key?: string
           horarios_atendimento?: Json
           horarios_disponiveis?: string
           idioma?: string | null
@@ -198,7 +198,6 @@ export type Database = {
           ai_provider?: string
           antecedencia_min?: string
           anthropic_api_key?: string
-          gemini_api_key?: string
           apresentacao?: string
           assinar_mensagens?: boolean | null
           chamar_por_nome?: boolean | null
@@ -215,6 +214,7 @@ export type Database = {
           foco_atendimento?: string | null
           formalidade?: number
           formas_pagamento?: string
+          gemini_api_key?: string
           horarios_atendimento?: Json
           horarios_disponiveis?: string
           idioma?: string | null
