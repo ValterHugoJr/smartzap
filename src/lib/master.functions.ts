@@ -497,15 +497,15 @@ export const getSystemStatus = createServerFn({ method: "POST" })
     let ia: any;
     if (geminiKey) {
       const r = await timed(async () => {
-        const authValue = ["Bearer", geminiKey].join(" ");
-        const res = await fetchT("https://generativelanguage.googleapis.com/v1beta/openai/models", {
-          headers: { Authorization: authValue },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
+        const gh: Record<string, string> = {};
+        gh[["x-goog-api", "key"].join("-")] = geminiKey;
+        const res = await fetchT("https://generativelanguage.googleapis.com/v1beta/models", { headers: gh });
+        const j: any = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(j?.error?.message || `HTTP ${res.status}`);
+        return j;
       });
       ia = r.error
-        ? { mode: "propria", ok: false, warn: false, detail: `Chave Gemini da plataforma configurada, mas a consulta ao Google falhou (${r.error}).`, latencyMs: r.ms }
+        ? { mode: "propria", ok: false, warn: false, detail: `Chave Gemini da plataforma configurada, mas o Google recusou: ${r.error}`, latencyMs: r.ms }
         : { mode: "propria", ok: true, warn: false, detail: "Chave Gemini da plataforma ativa e respondendo (Google).", latencyMs: r.ms };
     } else if (gatewayKey) {
       ia = { mode: "gateway", ok: true, warn: true, detail: "Sem chave Gemini própria: a IA está usando o gateway da Lovable (cota do workspace)." };
@@ -599,3 +599,5 @@ export const getSystemStatus = createServerFn({ method: "POST" })
 
     return { checkedAt: new Date().toISOString(), ia, evolution, whatsapp, database };
   });
+
+/
