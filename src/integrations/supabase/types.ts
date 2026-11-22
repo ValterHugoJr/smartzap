@@ -72,6 +72,7 @@ export type Database = {
           ai_provider: string
           antecedencia_min: string
           anthropic_api_key: string
+          gemini_api_key: string
           apresentacao: string
           assinar_mensagens: boolean | null
           chamar_por_nome: boolean | null
@@ -134,6 +135,7 @@ export type Database = {
           ai_provider?: string
           antecedencia_min?: string
           anthropic_api_key?: string
+          gemini_api_key?: string
           apresentacao?: string
           assinar_mensagens?: boolean | null
           chamar_por_nome?: boolean | null
@@ -196,6 +198,7 @@ export type Database = {
           ai_provider?: string
           antecedencia_min?: string
           anthropic_api_key?: string
+          gemini_api_key?: string
           apresentacao?: string
           assinar_mensagens?: boolean | null
           chamar_por_nome?: boolean | null
