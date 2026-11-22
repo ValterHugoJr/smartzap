@@ -1,5 +1,4 @@
 // Multi-provider AI chat. Gemini default via Lovable Gateway (free for users).
-import { createAgentChat } from "./agent-ai.functions";
 
 export type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
 
@@ -114,4 +113,23 @@ async function googleDirectChat(key: string, model: string, messages: ChatMsg[])
   }
   const data = await res.json();
   return data?.choices?.[0]?.message?.content?.toString().trim() || "";
+}
+
+// Compatibilidade: os chamadores (webhook, teste de IA e montagem do agente)
+// usam lovableAiChat(messages, config) — esta função adapta pra aiChat.
+export async function lovableAiChat(
+  messages: ChatMsg[],
+  modelOrConfig: string | AiProviderConfig = "google/gemini-2.5-flash",
+): Promise<string> {
+  const cfg: AiProviderConfig =
+    typeof modelOrConfig === "string"
+      ? { provider: "gemini", model: modelOrConfig }
+      : {
+          provider: (modelOrConfig?.provider as AiProviderConfig["provider"]) || "gemini",
+          model: modelOrConfig?.model,
+          openaiKey: modelOrConfig?.openaiKey,
+          anthropicKey: modelOrConfig?.anthropicKey,
+          geminiKey: modelOrConfig?.geminiKey,
+        };
+  return aiChat(cfg, messages);
 }
