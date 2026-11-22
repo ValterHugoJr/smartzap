@@ -80,7 +80,15 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
 
     // Instância pré-criada (com token próprio): NÃO tenta criar pela API —
     // a criação é feita pelo provedor no painel dele; aqui só conecta.
-    if (!instKey) try {
+    // Se a instância JÁ existe no servidor (ex.: criada pelo provedor),
+  // criar de novo faz a Evolution responder 403 Forbidden — nesse caso
+  // pula a criação e vai direto pro QR Code.
+  let jaExiste = false;
+  try {
+    await evoState(instanceName, instKey);
+    jaExiste = true;
+  } catch {}
+  if (!instKey && !jaExiste) try {
       await evoCreateInstance(instanceName, webhookUrl);
     } catch (e: any) {
       const msg = String(e?.message || "");
