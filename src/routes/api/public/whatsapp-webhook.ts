@@ -8,7 +8,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const payload: any = await request.json().catch(() => ({}));
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
           const { evoSendText, evoSendPresence, evoSendMedia } = await import("@/lib/evolution.server");
-          const { lovableAiChat } = await import("@/lib/lovable-ai.server");
+          const { lovableAiChat, normalizeAiProvider } = await import("@/lib/lovable-ai.server");
           const { buildSystemPrompt, parseAiOutput } = await import("@/lib/ai-prompt");
 
           const event: string | undefined = payload?.event;
@@ -339,7 +339,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             return new Response(throttleReason, { status: 200 });
           }
           const plan = await getCompanyPlan(companyId);
-          let providerChoice = ((cfg as any)?.ai_provider || "gemini") as string;
+          let providerChoice = normalizeAiProvider((cfg as any)?.ai_provider);
           let modelChoice = ((cfg as any)?.ai_model || "google/gemini-2.5-flash") as string;
           if (!allowsProvider(plan.slug, providerChoice)) {
             providerChoice = "gemini";

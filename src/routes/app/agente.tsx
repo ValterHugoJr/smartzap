@@ -377,7 +377,7 @@ function AgentePage() {
                         <div className="flex-1">
                         <div className="font-semibold flex items-center gap-2">
                         Google Agenda
-                          {google?.conectado && <span className="text-[10px] bg-[var(--brand)]/15 text-[var(--brand-text)] px-1.5 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 className="size-3" />Conectado}</span>}
+                          {google?.conectado && <span className="text-[10px] bg-[var(--brand)]/15 text-[var(--brand-text)] px-1.5 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 className="size-3" />Conectado</span>}
                     </div>
                           {google?.email && <div className="text-xs text-muted-foreground">{google.email}</div>}
                           <p className="text-xs text-muted-foreground mt-1">Permite que a IA marque eventos automaticamente, consultando os horários livres.</p>

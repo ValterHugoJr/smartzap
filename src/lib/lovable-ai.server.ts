@@ -13,6 +13,12 @@ export type AiProviderConfig = {
   geminiKey?: string;
 };
 
+// Valor de agent_config.ai_provider vem do banco: só aceita os três provedores
+// conhecidos; qualquer outro valor cai no padrão (gemini) em vez de vazar pro Gateway.
+export function normalizeAiProvider(value: unknown): AiProviderConfig["provider"] {
+  return value === "openai" || value === "anthropic" || value === "gemini" ? value : "gemini";
+}
+
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 export async function aiChat(cfg: AiProviderConfig, messages: ChatMsg[]): Promise<string> {

@@ -283,7 +283,7 @@ export const testAiReply = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     const companyId = await resolveCompanyId(supabase, userId);
-    const { lovableAiChat } = await import("./lovable-ai.server");
+    const { lovableAiChat, normalizeAiProvider } = await import("./lovable-ai.server");
     const { buildSystemPrompt, parseAiOutput } = await import("./ai-prompt");
     const [{ data: cfg }, { data: stagesRows }, { data: prodRows }] = await Promise.all([
       supabase.from("agent_config").select("*").eq("company_id", companyId).maybeSingle(),
@@ -302,7 +302,7 @@ export const testAiReply = createServerFn({ method: "POST" })
     const { getCompanyPlan } = await import("./plan-limits.server");
     const { allowsProvider, PLAN_LABEL } = await import("./plan-features");
     const plan = await getCompanyPlan(companyId);
-    let provider = ((cfg as any)?.ai_provider || "gemini") as string;
+    let provider = normalizeAiProvider((cfg as any)?.ai_provider);
     let model = ((cfg as any)?.ai_model || "google/gemini-2.5-flash") as string;
     if (!allowsProvider(plan.slug, provider)) {
       throw new Error(
