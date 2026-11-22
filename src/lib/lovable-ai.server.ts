@@ -1,30 +1,23 @@
 // Multi-provider AI chat. Gemini default via Lovable Gateway (free for users).
-// OpenAI e Anthropic usam a chave da própria empresa.
+import { createAgentChat } from "./agent-ai.functions";
 
-export interface ChatMsg {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
+export type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
 
-export interface AiProviderConfig {
-  provider?: "gemini" | "openai" | "anthropic" | string;
+export type AiProviderConfig = {
+  provider: "gemini" | "openai" | "anthropic";
   model?: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
   openaiKey?: string;
   anthropicKey?: string;
-}
+  geminiKey?: string;
+};
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
-export async function lovableAiChat(
-  messages: ChatMsg[],
-  modelOrConfig: string | AiProviderConfig = "google/gemini-2.5-flash",
-): Promise<string> {
-  const cfg: AiProviderConfig =
-    typeof modelOrConfig === "string"
-      ? { provider: "gemini", model: modelOrConfig }
-      : modelOrConfig;
-  const provider = (cfg.provider || "gemini").toLowerCase();
-
+export async function aiChat(cfg: AiProviderConfig, messages: ChatMsg[]): Promise<string> {
+  const provider = cfg.provider || "gemini";
   if (provider === "openai") {
     const key = cfg.openaiKey?.trim();
     if (!key) throw new Error("Chave OpenAI não configurada na sua empresa.");
@@ -37,6 +30,9 @@ export async function lovableAiChat(
     const model = cfg.model || "claude-3-5-sonnet-latest";
     return anthropicChat(key, model, messages);
   }
+  // Gemini com a chave da própria empresa (direto no Google, sem gateway)
+  const ownKey = cfg.geminiKey?.trim();
+  if (ownKey) return googleDirectChat(ownKey, cfg.model || "google/gemini-2.5-flash", messages);
   // default: Gemini via Lovable Gateway
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("LOVABLE_API_KEY ausente.");
@@ -95,4 +91,23 @@ async function anthropicChat(key: string, model: string, messages: ChatMsg[]): P
     .join("\n")
     .trim();
   return txt;
+}
+
+async function googleDirectChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
+  const directModel = model.replace(/^google\//, "");
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: directModel, messages }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    if (res.status === 429) throw new Error("Limite de uso da sua chave Gemini atingido. Tente em alguns minutos.");
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
+      throw new Error("Chave Gemini inválida ou sem permissão. Confira a chave salva nas configurações do agente.");
+    }
+    throw new Error(`Gemini (chave própria): ${res.status} ${t.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content?.toString().trim() || "";
 }
