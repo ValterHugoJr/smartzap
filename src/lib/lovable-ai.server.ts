@@ -34,7 +34,8 @@ export async function aiChat(cfg: AiProviderConfig, messages: ChatMsg[]): Promis
   const ownKey = cfg.geminiKey?.trim();
   if (ownKey) return googleDirectChat(ownKey, cfg.model || "google/gemini-2.5-flash", messages);
   // Chave Gemini da plataforma (conta do dono do sistema) — prioridade sobre o gateway
-  const platformKey = process.env.GEMINI_API_KEY?.trim();
+  const { getPlatformConfig } = await import("@/lib/platform-config.server");
+  const platformKey = (await getPlatformConfig()).geminiKey.trim();
   if (platformKey) return googleDirectChat(platformKey, cfg.model || "google/gemini-2.5-flash", messages);
   // fallback: Gemini via Lovable Gateway
   const key = process.env.LOVABLE_API_KEY;
