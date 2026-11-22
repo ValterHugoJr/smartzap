@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, X, Save, Copy, CheckCircle2, AlertCircle, BookOpen, Zap } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { brand } from "@/config/brand";
-import { getSuperAdminEmails, setSuperAdminEmails } from "@/lib/master.functions";
+import { getSuperAdminEmails, setSuperAdminEmails, getPlatformIntegrations, setPlatformIntegrations } from "@/lib/master.functions";
 import { getBillingWebhookInfo, listRecentBillingEvents } from "@/lib/billing.functions";
 
 export const Route = createFileRoute("/master/configuracoes")({
@@ -22,6 +22,15 @@ function ConfigPage() {
   const set = useServerFn(setSuperAdminEmails);
   const getWebhooks = useServerFn(getBillingWebhookInfo);
   const getEvents = useServerFn(listRecentBillingEvents);
+  const getInteg = useServerFn(getPlatformIntegrations);
+  const setIntegFn = useServerFn(setPlatformIntegrations);
+  const [integ, setInteg] = useState<any>(null);
+  const [fEvoUrl, setFEvoUrl] = useState("");
+  const [fEvoKey, setFEvoKey] = useState("");
+  const [fGemini, setFGemini] = useState("");
+  const [fGId, setFGId] = useState("");
+  const [fGSecret, setFGSecret] = useState("");
+  const [savingInteg, setSavingInteg] = useState(false);
 
   const [emails, setEmails] = useState<string[]>([]);
   const [novo, setNovo] = useState("");
@@ -32,7 +41,12 @@ function ConfigPage() {
 
   useEffect(() => {
     void (async () => {
-      const [r, w, e] = await Promise.allSettled([get(), getWebhooks(), getEvents()]);
+      const [r, w, e, gi] = await Promise.allSettled([get(), getWebhooks(), getEvents(), getInteg()]);
+      if (gi.status === "fulfilled") {
+        setInteg(gi.value);
+        setFEvoUrl(gi.value.evolutionUrl.value || "");
+        setFGId(gi.value.googleClientId.value || "");
+      } else toast.error(`Integrações: ${gi.reason?.message ?? gi.reason}`);
       if (r.status === "fulfilled") setEmails(r.value.emails);
       else toast.error(`Emails: ${r.reason?.message ?? r.reason}`);
       if (w.status === "fulfilled") setTokens(w.value);
@@ -59,6 +73,41 @@ function ConfigPage() {
     finally { setSaving(false); }
   }
 
+  async function loadInteg() {
+    const r = await getInteg();
+    setInteg(r);
+    setFEvoUrl(r.evolutionUrl.value || "");
+    setFGId(r.googleClientId.value || "");
+  }
+
+  async function saveInteg() {
+    setSavingInteg(true);
+    try {
+      const data: Record<string, string> = {};
+      const put = (k: string, v: string) => { if (v.trim()) data[k] = v.trim(); };
+      put("evolution_api_url", fEvoUrl);
+      put("evolution_api_key", fEvoKey);
+      put("gemini_api_key", fGemini);
+      put("google_client_id", fGId);
+      put("google_client_secret", fGSecret);
+      await setIntegFn({ data });
+      setFEvoKey("");
+      setFGemini("");
+      setFGSecret("");
+      await loadInteg();
+      toast.success("Integrações salvas");
+    } catch (e: any) { toast.error(e?.message); }
+    finally { setSavingInteg(false); }
+  }
+
+  async function clearInteg(field: string) {
+    try {
+      await setIntegFn({ data: { clear: [field] } });
+      await loadInteg();
+      toast.success("Removido do sistema — volta a valer o segredo da Lovable, se houver");
+    } catch (e: any) { toast.error(e?.message); }
+  }
+
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const url = (provider: "kiwify" | "cakto" | "perfectpay") =>
     tokens?.[provider]
@@ -74,7 +123,7 @@ function ConfigPage() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
-        <p className="text-sm text-muted-foreground">Super admins e integrações de cobrança.</p>
+        <p className="text-sm text-muted-foreground">Super admins, cobrança e integrações da plataforma.</p>
       </div>
 
       <Card className="p-5 space-y-4">
@@ -212,6 +261,58 @@ function ConfigPage() {
         </div>
       </Card>
 
+            <Card className="p-5 space-y-4">
+        <div>
+          <h2 className="font-semibold">Integrações da plataforma</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            As chaves que fazem a plataforma funcionar (WhatsApp, IA e Google Agenda). O que você salvar
+            aqui vale na hora e tem <b>prioridade</b> sobre os segredos da Lovable — que seguem como reserva
+            pros campos que ficarem vazios aqui. Campos de chave nunca mostram o valor: só o final (••••).
+            Deixe o campo em branco pra manter o valor atual.
+          </p>
+        </div>
+
+        {loading || !integ ? (
+          <div className="grid place-items-center py-6"><Loader2 className="animate-spin text-muted-foreground" /></div>
+        ) : (
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider">WhatsApp (Evolution)</div>
+              <IntegRow label="URL do servidor" badge={integ.evolutionUrl.source} onClear={integ.evolutionUrl.source === "sistema" ? () => void clearInteg("evolution_api_url") : undefined}>
+                <Input value={fEvoUrl} onChange={(e) => setFEvoUrl(e.target.value)} placeholder="https://..." className="font-mono text-[12px]" />
+              </IntegRow>
+              <IntegRow label="Chave global (API key)" badge={integ.evolutionKey.source} hint={integ.evolutionKey.hint} onClear={integ.evolutionKey.source === "sistema" ? () => void clearInteg("evolution_api_key") : undefined}>
+                <Input type="password" value={fEvoKey} onChange={(e) => setFEvoKey(e.target.value)} placeholder="Nova chave (em branco = manter a atual)" className="font-mono text-[12px]" />
+              </IntegRow>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider">IA da plataforma (Gemini)</div>
+              <IntegRow label="Chave Gemini da plataforma" badge={integ.geminiKey.source} hint={integ.geminiKey.hint} onClear={integ.geminiKey.source === "sistema" ? () => void clearInteg("gemini_api_key") : undefined}>
+                <Input type="password" value={fGemini} onChange={(e) => setFGemini(e.target.value)} placeholder="Nova chave AIza... (em branco = manter a atual)" className="font-mono text-[12px]" />
+              </IntegRow>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider">Google Agenda (OAuth)</div>
+              <IntegRow label="Client ID" badge={integ.googleClientId.source} onClear={integ.googleClientId.source === "sistema" ? () => void clearInteg("google_client_id") : undefined}>
+                <Input value={fGId} onChange={(e) => setFGId(e.target.value)} placeholder="....apps.googleusercontent.com" className="font-mono text-[12px]" />
+              </IntegRow>
+              <IntegRow label="Client Secret" badge={integ.googleClientSecret.source} hint={integ.googleClientSecret.hint} onClear={integ.googleClientSecret.source === "sistema" ? () => void clearInteg("google_client_secret") : undefined}>
+                <Input type="password" value={fGSecret} onChange={(e) => setFGSecret(e.target.value)} placeholder="Novo segredo (em branco = manter o atual)" className="font-mono text-[12px]" />
+              </IntegRow>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={() => void saveInteg()} disabled={savingInteg}>
+                {savingInteg ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Save className="size-4 mr-1.5" />}
+                Salvar integrações
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
       <Card className="p-5 space-y-4">
         <h2 className="font-semibold">Emails de super admin</h2>
         <form onSubmit={add} className="flex gap-2">
@@ -240,6 +341,27 @@ function ConfigPage() {
           </Button>
         </div>
       </Card>
+    </div>
+  );
+}
+
+
+function IntegRow({ label, badge, hint, onClear, children }: { label: string; badge: string; hint?: string; onClear?: () => void; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-xs font-medium">{label}</span>
+        {badge === "sistema" && <Badge variant="secondary" className="text-[10px]">salvo no sistema</Badge>}
+        {badge === "ambiente" && <Badge variant="outline" className="text-[10px]">segredo da Lovable</Badge>}
+        {badge === "vazio" && <Badge variant="destructive" className="text-[10px]">não configurado</Badge>}
+        {hint && <span className="text-[11px] text-muted-foreground font-mono">{hint}</span>}
+        {onClear && (
+          <button onClick={onClear} className="ml-auto text-[11px] text-muted-foreground hover:text-destructive underline underline-offset-2">
+            remover do sistema
+          </button>
+        )}
+      </div>
+      {children}
     </div>
   );
 }
