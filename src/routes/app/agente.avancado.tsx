@@ -245,7 +245,7 @@ function AgentePage() {
                   <p className="text-xs text-muted-foreground">
                     {ownKey
                       ? "No seu plano, a IA usa a sua própria chave do Google Gemini — o custo de uso é da sua conta Google."
-                      : "Gemini é o padrão e já vem incluso."} {(!allowOpenAI || !allowAnthropic) && (>GPT e Claude exigem o plano Pro. <Link to="/app/checkout" className="underline">Fazer upgrade</Link>.</>
+                      : "Gemini é o padrão e já vem incluso."} {(!allowOpenAI || !allowAnthropic) && (<>GPT e Claude exigem o plano Pro. <Link to="/app/checkout" className="underline">Fazer upgrade</Link>.</>
                     )}
                   </p>
                 </div>
@@ -265,7 +265,7 @@ function AgentePage() {
       <div className="space-y-1.5">
       <Label>Sua chave Gemini (AIza...)</Label>
         <Input type="password" value={cfg.gemini_api_key || ""} onChange={(e) => up("gemini_api_key", e.target.value)} placeholder="AIza..." />
-        <p className="text-xs text-muted-foreground">Grátis pra criar em aistudio.google.com → "Get API key". A chave fica salva só pra sua empresa e o custo de uso é da sua conta Google.</p></p>
+        <p className="text-xs text-muted-foreground">Grátis pra criar em aistudio.google.com → "Get API key". A chave fica salva só pra sua empresa e o custo de uso é da sua conta Google.</p>
       </div>
       )}
       {cfg.ai_provider === "openai" && (
