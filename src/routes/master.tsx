@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet, redirect, Link, useLocation } from "@tanstack/react-router";
+import { Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { brand } from "@/config/brand";
 import { Shield, LogOut, BarChart3, Building2, Plus, Settings, ArrowLeft, Package, CreditCard } from "lucide-react";
@@ -45,7 +46,6 @@ const sections = [
   {
     label: "Administração",
     items: [
-      { to: "/master/nova-empresa", label: "Nova empresa", icon: Plus },
       { to: "/master/configuracoes", label: "Configurações", icon: Settings },
     ],
   },
@@ -70,6 +70,7 @@ function MasterLayout() {
   const isOwner = ctx?.user?.id === OWNER_USER_ID;
   const demoMode = isOwner && loc.pathname.startsWith("/master/apresentacao");
   const demoAba = ((loc.search as any)?.aba as string) || "painel";
+  const onNovaEmpresa = loc.pathname.startsWith("/master/nova-empresa");
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden">
@@ -140,6 +141,7 @@ function MasterLayout() {
                     const active = demoMode ? aba === demoAba : loc.pathname.startsWith(it.to);
                     const Icon = it.icon;
                     return (
+                      <Fragment key={it.to}>
                       <Link
                         key={it.to}
                         to={(aba ? "/master/apresentacao" : it.to) as any}
@@ -162,6 +164,19 @@ function MasterLayout() {
                         <Icon className="size-[18px] shrink-0" style={active ? { color: RED } : undefined} />
                         <span className="flex-1 truncate">{it.label}</span>
                       </Link>
+                      {it.to === "/master/empresas" && (
+                        <Link
+                          to="/master/nova-empresa"
+                          className={`relative flex items-center gap-2.5 ml-9 px-3 py-2 rounded-lg text-[13.5px] font-medium whitespace-nowrap transition-all ${
+                            onNovaEmpresa ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel-2)]"
+                          }`}
+                          style={onNovaEmpresa ? { background: RED_SOFT, boxShadow: `inset 0 0 0 1px ${RED_SOFT_STRONG}` } : undefined}
+                        >
+                          <Plus className="size-4 shrink-0" style={onNovaEmpresa ? { color: RED } : undefined} />
+                          <span className="flex-1 truncate">Cadastrar empresa</span>
+                        </Link>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </div>
