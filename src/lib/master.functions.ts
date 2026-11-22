@@ -599,4 +599,3 @@ export const getSystemStatus = createServerFn({ method: "POST" })
 
     return { checkedAt: new Date().toISOString(), ia, evolution, whatsapp, database };
   });
-
