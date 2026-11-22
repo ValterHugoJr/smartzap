@@ -29,28 +29,36 @@ function startOfMonthISO(): string {
 export async function getCompanyPlan(companyId: string): Promise<CompanyPlan> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  // 0) Empresa vitalícia (definida pelo master) → plano Business (topo) sempre,
-  // com todos os recursos e limites do maior plano, sem cobrança.
+  // 0) Empresa vitalícia (definida pelo master) → roda no plano que o master
+  // escolheu (company.plano_vitalicio: starter | pro | business), sem cobrança.
+  // Sem escolha salva, Business (topo) — comportamento original.
   const { data: comp } = await supabaseAdmin
     .from("company")
-    .select("status_cobranca")
+    .select("status_cobranca, plano_vitalicio")
     .eq("id", companyId)
     .maybeSingle();
   if (comp?.status_cobranca === "vitalicio") {
-    const { data: biz } = await supabaseAdmin
+    const chosen = normalizePlanSlug((comp as any)?.plano_vitalicio || "business");
+    const { data: planRow } = await supabaseAdmin
       .from("plan")
       .select("slug, nome, limite_instancias, limite_mensagens, limite_usuarios, limite_contatos")
-      .eq("slug", "business")
+      .eq("slug", chosen)
       .maybeSingle();
-    if (biz) {
+    if (planRow) {
+      const FALLBACK: Record<string, { usuarios: number; contatos: number; mensagens: number }> = {
+        starter: { usuarios: 1, contatos: 1000, mensagens: 1500 },
+        pro: { usuarios: 5, contatos: 5000, mensagens: 6000 },
+        business: { usuarios: 20, contatos: 25000, mensagens: 30000 },
+      };
+      const fb = FALLBACK[chosen] ?? FALLBACK.business;
       return {
-        slug: "business",
-        nome: biz.nome || PLAN_LABEL.business,
+        slug: chosen,
+        nome: planRow.nome || PLAN_LABEL[chosen],
         limites: {
           instancias: 1,
-          usuarios: Number(biz.limite_usuarios ?? 20),
-          contatos: Number(biz.limite_contatos ?? 25000),
-          mensagens: Number(biz.limite_mensagens ?? 30000),
+          usuarios: Number(planRow.limite_usuarios ?? fb.usuarios),
+          contatos: Number(planRow.limite_contatos ?? fb.contatos),
+          mensagens: Number(planRow.limite_mensagens ?? fb.mensagens),
         },
       };
     }
