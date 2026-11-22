@@ -312,6 +312,7 @@ export const testAiReply = createServerFn({ method: "POST" })
         model,
         openaiKey: (cfg as any)?.openai_api_key || "",
         anthropicKey: (cfg as any)?.anthropic_api_key || "",
+        geminiKey: (cfg as any)?.gemini_api_key || "",
       },
     );
     const { parts, stage } = parseAiOutput(raw, stages);
