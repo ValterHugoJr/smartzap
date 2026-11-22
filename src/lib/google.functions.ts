@@ -12,9 +12,11 @@ async function buildOrigin() {
 export const startGoogleOAuth = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) {
-      return { ok: false as const, error: "Google OAuth não configurado. Peça ao administrador para definir GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET." };
+    const { getGoogleCreds } = await import("@/lib/platform-config.server");
+    const gcreds = await getGoogleCreds();
+    const clientId = gcreds.id;
+    if (!clientId || !gcreds.secret) {
+      return { ok: false as const, error: "Google OAuth não configurado. Peça ao administrador para configurar as credenciais do Google em Master → Configurações → Integrações da plataforma." };
     }
     const { supabase, userId } = context;
     const { data: cu } = await supabase
@@ -84,12 +86,14 @@ export const createGoogleCalendarEvent = createServerFn({ method: "POST" })
     // Refresh if needed
     let accessToken = gi.access_token as string;
     if (gi.expiry && new Date(gi.expiry).getTime() < Date.now() + 60_000 && gi.refresh_token) {
+      const { getGoogleCreds } = await import("@/lib/platform-config.server");
+      const gcreds = await getGoogleCreds();
       const tokRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: process.env.GOOGLE_CLIENT_ID!,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          client_id: gcreds.id,
+          client_secret: gcreds.secret,
           refresh_token: gi.refresh_token as string,
           grant_type: "refresh_token",
         }),
