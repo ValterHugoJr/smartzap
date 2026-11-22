@@ -23,14 +23,16 @@ export function verifyState(state: string): { companyId: string } | null {
 }
 
 async function getGoogleAccessToken(admin: any, gi: any): Promise<string> {
+  const { getGoogleCreds } = await import("@/lib/platform-config.server");
+  const gcreds = await getGoogleCreds();
   let accessToken = gi.access_token as string;
   if (gi.expiry && new Date(gi.expiry).getTime() < Date.now() + 60_000 && gi.refresh_token) {
     const tokRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID || "",
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+        client_id: gcreds.id,
+        client_secret: gcreds.secret,
         refresh_token: gi.refresh_token,
         grant_type: "refresh_token",
       }),
