@@ -303,16 +303,31 @@ export type Database = {
       }
       app_config: {
         Row: {
+          evolution_api_key: string
+          evolution_api_url: string
+          gemini_api_key: string
+          google_client_id: string
+          google_client_secret: string
           id: boolean
           super_admin_emails: string[]
           updated_at: string
         }
         Insert: {
+          evolution_api_key?: string
+          evolution_api_url?: string
+          gemini_api_key?: string
+          google_client_id?: string
+          google_client_secret?: string
           id?: boolean
           super_admin_emails?: string[]
           updated_at?: string
         }
         Update: {
+          evolution_api_key?: string
+          evolution_api_url?: string
+          gemini_api_key?: string
+          google_client_id?: string
+          google_client_secret?: string
           id?: boolean
           super_admin_emails?: string[]
           updated_at?: string
