@@ -118,15 +118,18 @@ export const suspendCompany = createServerFn({ method: "POST" })
 
 export const setCompanyLifetime = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { companyId: string; lifetime: boolean }) => d)
+  .inputValidator((d: { companyId: string; lifetime: boolean; planSlug?: string }) => d)
   .handler(async ({ context, data }) => {
     await assertSuper(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const farFuture = "2099-12-31T23:59:59.000Z";
     if (data.lifetime) {
+      const slug = ["starter", "pro", "business"].includes(String(data.planSlug || "").toLowerCase())
+        ? String(data.planSlug).toLowerCase()
+        : "business";
       const { error } = await supabaseAdmin
         .from("company")
-        .update({ status_cobranca: "vitalicio", trial_ate: farFuture })
+        .update({ status_cobranca: "vitalicio", trial_ate: farFuture, plano_vitalicio: slug })
         .eq("id", data.companyId);
       if (error) throw error;
       await supabaseAdmin
@@ -492,7 +495,6 @@ export const getSystemStatus = createServerFn({ method: "POST" })
     }
     const { getPlatformConfig } = await import("@/lib/platform-config.server");
     const pcfg = await getPlatformConfig();
-    
 
     // --- IA da plataforma ---
     const geminiKey = pcfg.geminiKey.trim();
