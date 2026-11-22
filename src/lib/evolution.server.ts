@@ -5,11 +5,13 @@ import * as QRCode from "qrcode";
 
 const SUPPORT_SUFFIX = " Se persistir, fale com o suporte: https://wa.me/5551982913030";
 
-function env() {
-  const url = process.env.EVOLUTION_API_URL;
-  const key = process.env.EVOLUTION_API_KEY;
+async function env() {
+  const { getPlatformConfig } = await import("@/lib/platform-config.server");
+  const cfg = await getPlatformConfig();
+  const url = cfg.evolutionUrl;
+  const key = cfg.evolutionKey;
   if (!url) {
-    throw new Error(`Servidor do WhatsApp não configurado. Configure EVOLUTION_API_URL nos segredos do backend.${SUPPORT_SUFFIX}`);
+    throw new Error(`Servidor do WhatsApp não configurado. Configure a Evolution em Master → Configurações → Integrações da plataforma ou nos segredos do backend.${SUPPORT_SUFFIX}`);
   }
   return { url: url.replace(/\/+$/, ""), key: key || "" };
 }
@@ -18,10 +20,10 @@ async function evo<T = any>(
   path: string,
   init: RequestInit & { json?: any; apiKey?: string } = {},
 ): Promise<T> {
-  const { url, key: globalKey } = env();
+  const { url, key: globalKey } = await env();
   const key = init.apiKey || globalKey;
   if (!key) {
-    throw new Error(`Servidor do WhatsApp não configurado. Configure EVOLUTION_API_KEY nos segredos do backend.${SUPPORT_SUFFIX}`);
+    throw new Error(`Servidor do WhatsApp não configurado. Configure a chave da Evolution em Master → Configurações → Integrações da plataforma ou nos segredos do backend.${SUPPORT_SUFFIX}`);
   }
   const headers: Record<string, string> = {
     apikey: key,
