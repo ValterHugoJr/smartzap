@@ -65,17 +65,46 @@ function EmpresasPage() {
     reload();
   }
 
-  async function doLifetime(c: any) {
-    const isLifetime = c.status_cobranca === "vitalicio";
-    if (!confirm(isLifetime
-                 ? `Remover o acesso vitalício de "${c.nome}"? Ela volta para o status ativo comum.`
-                 : `Tornar "${c.nome}" vitalícia? Ela nunca será bloqueada por falta de pagamento.`)) return;
+  const [lifetimeTarget, setLifetimeTarget] = useState<any | null>(null);
+  const [lifetimePlan, setLifetimePlan] = useState<string>("business");
+  const [lifetimeSaving, setLifetimeSaving] = useState(false);
+
+  function doLifetime(c: any) {
+    setLifetimePlan((c as any).plano_vitalicio || "business");
+    setLifetimeTarget(c);
+  }
+
+  async function confirmLifetime() {
+    if (!lifetimeTarget) return;
+    const jaEra = lifetimeTarget.status_cobranca === "vitalicio";
+    setLifetimeSaving(true);
     try {
-      await lifetimeFn({ data: { companyId: c.id, lifetime: !isLifetime } });
-      toast.success(isLifetime ? "Vitalício removido — empresa ativa comum" : "Empresa agora é vitalícia");
+      await lifetimeFn({ data: { companyId: lifetimeTarget.id, lifetime: true, planSlug: lifetimePlan } });
+      toast.success(jaEra
+        ? `Plano da vitalícia atualizado: ${planName(lifetimePlan)}`
+        : `Empresa agora é vitalícia no plano ${planName(lifetimePlan)}`);
+      setLifetimeTarget(null);
       reload();
     } catch (e: any) {
       toast.error(e?.message || "Falha ao alterar vitalício");
+    } finally {
+      setLifetimeSaving(false);
+    }
+  }
+
+  async function removeLifetime() {
+    if (!lifetimeTarget) return;
+    if (!confirm(`Remover o acesso vitalício de "${lifetimeTarget.nome}"? Ela volta para o status ativo comum.`)) return;
+    setLifetimeSaving(true);
+    try {
+      await lifetimeFn({ data: { companyId: lifetimeTarget.id, lifetime: false } });
+      toast.success("Vitalício removido — empresa ativa comum");
+      setLifetimeTarget(null);
+      reload();
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao remover vitalício");
+    } finally {
+      setLifetimeSaving(false);
     }
   }
  
@@ -195,7 +224,7 @@ function EmpresasPage() {
                   <StatusBadge s={c.status_cobranca} />
                 </div>
                 <div className="col-span-2 text-xs text-muted-foreground">
-                  {c.status_cobranca === "vitalicio" ? "Vitalício" : c.trial_ate ? new Date(c.trial_ate).toLocaleDateString("pt-BR") : "—"}
+                  {c.status_cobranca === "vitalicio" ? `Vitalício · ${planName((c as any).plano_vitalicio || "business")}` : c.trial_ate ? new Date(c.trial_ate).toLocaleDateString("pt-BR") : "—"}
                 </div>
                 <div className="col-span-2 text-xs text-muted-foreground">
                   {new Date(c.created_at).toLocaleDateString("pt-BR")}
@@ -217,7 +246,7 @@ function EmpresasPage() {
                     <CalendarClock className="size-3.5" />
                   </Button>
                   <Button size="sm" variant={c.status_cobranca === "vitalicio" ? "default" : "outline"} onClick={() => doLifetime(c)}
-                    title={c.status_cobranca === "vitalicio" ? "Vitalícia — clique para remover" : "Tornar vitalícia"}>
+                    title={c.status_cobranca === "vitalicio" ? "Vitalícia — clique para gerenciar o plano" : "Tornar vitalícia"}>
                     <Crown className="size-3.5" />
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => toggleSuspend(c)}
@@ -325,6 +354,53 @@ function EmpresasPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!lifetimeTarget} onOpenChange={(o) => !o && setLifetimeTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crown className="size-5 text-amber-500" />
+              {lifetimeTarget?.status_cobranca === "vitalicio" ? "Empresa vitalícia" : "Tornar vitalícia"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>
+              <b>{lifetimeTarget?.nome}</b> {lifetimeTarget?.status_cobranca === "vitalicio"
+                ? "já é vitalícia. Você pode trocar o plano em que ela roda:"
+                : "nunca será bloqueada por falta de pagamento. Em qual plano ela vai rodar?"}
+            </p>
+            <div className="space-y-2">
+              {[
+                { slug: "starter", desc: "Recursos e limites do Starter (sem Financeiro e sem Google Agenda)" },
+                { slug: "pro", desc: "Recursos e limites do Pro (inclui Financeiro e Google Agenda)" },
+                { slug: "business", desc: "Tudo liberado, maiores limites" },
+              ].map((p) => (
+                <button key={p.slug} onClick={() => setLifetimePlan(p.slug)}
+                  className={`w-full text-left border rounded-md px-3 py-2 ${lifetimePlan === p.slug ? "border-amber-500 bg-amber-500/10" : ""}`}>
+                  <span className="font-medium flex items-center gap-2">
+                    <Crown className="size-3.5 text-amber-500" /> {planName(p.slug)}
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">{p.desc}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              {lifetimeTarget?.status_cobranca === "vitalicio" && (
+                <Button variant="ghost" className="text-destructive mr-auto" onClick={() => void removeLifetime()} disabled={lifetimeSaving}>
+                  Remover vitalício
+                </Button>
+              )}
+              <Button variant="outline" className={lifetimeTarget?.status_cobranca === "vitalicio" ? "" : "ml-auto"} onClick={() => setLifetimeTarget(null)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void confirmLifetime()} disabled={lifetimeSaving}>
+                {lifetimeSaving ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Crown className="size-4 mr-1.5" />}
+                {lifetimeTarget?.status_cobranca === "vitalicio" ? "Salvar plano" : "Tornar vitalícia"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -352,4 +428,10 @@ function StatusBadge({ s }: { s: string }) {
   if (s === "ativo") return <Badge className="bg-primary">Ativa</Badge>;
   if (s === "trial") return <Badge variant="secondary">Trial</Badge>;
   return <Badge variant="destructive">Suspensa</Badge>;
+}
+
+function planName(slug: string): string {
+  if (slug === "starter") return "Starter";
+  if (slug === "pro") return "Pro";
+  return "Business";
 }
