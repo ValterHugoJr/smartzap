@@ -96,7 +96,7 @@ async function anthropicChat(key: string, model: string, messages: ChatMsg[]): P
   return txt;
 }
 
-async function googleDirectChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
+async function googleDirectChatOnce(key: string, model: string, messages: ChatMsg[]): Promise<string> {
   let directModel = model.replace(/^google\//, "");
   // O gemini-2.5-flash foi encerrado pra contas novas (404 do Google);
   // qualquer variação 2.5 cai pro modelo atual sugerido pelo Google.
@@ -135,4 +135,35 @@ export async function lovableAiChat(
           geminiKey: modelOrConfig?.geminiKey,
         };
   return aiChat(cfg, messages);
+}
+
+// Chamada direta ao Google com resiliência: se o modelo principal estiver
+// congestionado (503) ou indisponível (404), tenta de novo e, persistindo,
+// cai pro modelo reserva (flash-lite) — um pico do Google não pode travar
+// o atendimento nem a montagem do agente.
+async function googleDirectChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
+  const base = model.replace(/^google\//, "");
+  const primary = base.startsWith("gemini-2.5") ? "gemini-3.8-flash" : base;
+  const candidates = primary === "gemini-3.5-flash-lite" ? [primary] : [primary, "gemini-3.5-flash-lite"];
+  let lastError: unknown = null;
+  for (const cand of candidates) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await googleDirectChatOnce(key, cand, messages);
+      } catch (e: any) {
+        lastError = e;
+        const msg = String(e?.message || "");
+        if (/503|UNAVAILABLE|high demand/i.test(msg)) {
+          if (attempt === 0) {
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+          }
+          break;
+        }
+        if (/404/.test(msg)) break;
+        throw e;
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
