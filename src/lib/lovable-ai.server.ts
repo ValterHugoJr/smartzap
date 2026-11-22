@@ -33,7 +33,10 @@ export async function aiChat(cfg: AiProviderConfig, messages: ChatMsg[]): Promis
   // Gemini com a chave da própria empresa (direto no Google, sem gateway)
   const ownKey = cfg.geminiKey?.trim();
   if (ownKey) return googleDirectChat(ownKey, cfg.model || "google/gemini-2.5-flash", messages);
-  // default: Gemini via Lovable Gateway
+  // Chave Gemini da plataforma (conta do dono do sistema) — prioridade sobre o gateway
+  const platformKey = process.env.GEMINI_API_KEY?.trim();
+  if (platformKey) return googleDirectChat(platformKey, cfg.model || "google/gemini-2.5-flash", messages);
+  // fallback: Gemini via Lovable Gateway
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("LOVABLE_API_KEY ausente.");
   const model = cfg.model || "google/gemini-2.5-flash";
