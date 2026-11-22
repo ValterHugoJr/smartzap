@@ -18,7 +18,12 @@ async function getCompanyAndPlan(supabase: any, userId: string) {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const planSlug = String(sub?.plan?.nome || "starter").toLowerCase();
+  let planSlug = String(sub?.plan?.nome || "starter").toLowerCase();
+  // Empresa vitalícia roda no plano escolhido pelo master (padrão: business)
+  if ((cu.company as any)?.status_cobranca === "vitalicio") {
+    const chosen = String((cu.company as any)?.plano_vitalicio || "business").toLowerCase();
+    planSlug = ["starter", "pro", "business"].includes(chosen) ? chosen : "business";
+  }
   return { companyId: cu.company_id, role: cu.role, company: cu.company, planSlug };
 }
 
