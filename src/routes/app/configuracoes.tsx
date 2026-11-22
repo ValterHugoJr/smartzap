@@ -1,6 +1,6 @@
 import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { HelpTip } from "@/components/help-tip";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Save, CreditCard, Sparkles, AlertTriangle, Download, Shield, Wallet, Lock } from "lucide-react";
+import { Loader2, Save, CreditCard, Sparkles, AlertTriangle, Download, Shield, Wallet, Lock, Upload } from "lucide-react";
 import { brand } from "@/config/brand";
 import { trialDaysLeft } from "@/lib/tenant";
 import { TemplatesTab } from "@/components/config/templates-tab";
@@ -74,6 +74,29 @@ function ConfigPage() {
     setSavingE(false);
     if (error) return toast.error(error.message);
     toast.success("Empresa atualizada"); setTimeout(() => location.reload(), 500);
+  }
+
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  async function uploadLogo(file: File) {
+    if (!companyId) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) return toast.error("Use uma imagem PNG, JPG ou WebP.");
+    if (file.size > 2 * 1024 * 1024) return toast.error("O logo precisa ter até 2 MB.");
+    setUploadingLogo(true);
+    try {
+      const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+      const path = `${companyId}/logo-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("logos").upload(path, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      const { data } = supabase.storage.from("logos").getPublicUrl(path);
+      setIdentidade((i) => ({ ...i, logo_url: data.publicUrl }));
+      toast.success("Logo enviado — clique em Salvar pra aplicar.");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao enviar o logo");
+    } finally {
+      setUploadingLogo(false);
+    }
   }
 
   async function saveIdentidade() {
@@ -169,9 +192,23 @@ function ConfigPage() {
               </div>
             </div>
             <div>
-              <Label>URL do logo</Label>
-              <Input value={identidade.logo_url} onChange={(e) => setIdentidade({ ...identidade, logo_url: e.target.value })} placeholder="https://…" />
-              {identidade.logo_url && <img src={identidade.logo_url} alt="logo" className="mt-2 size-16 rounded object-cover border" />}
+              <Label>Logo da empresa</Label>
+              <div className="flex items-center gap-3 mt-1">
+                {identidade.logo_url ? (
+                  <img src={identidade.logo_url} alt="logo" className="size-16 rounded object-cover border" />
+                ) : (
+                  <div className="size-16 rounded border grid place-items-center text-[10px] text-muted-foreground">sem logo</div>
+                )}
+                <div className="space-y-1.5">
+                  <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = ""; }} />
+                  <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo}>
+                    {uploadingLogo ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Upload className="size-4 mr-1.5" />}
+                    {uploadingLogo ? "Enviando…" : "Enviar logo"}
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground">PNG, JPG ou WebP, até 2 MB. Aparece na barra lateral do painel.</p>
+                </div>
+              </div>
+              <Input value={identidade.logo_url} onChange={(e) => setIdentidade({ ...identidade, logo_url: e.target.value })} placeholder="…ou cole a URL do logo" className="mt-2" />
             </div>
             <div className="flex justify-end">
               <Button onClick={saveIdentidade} disabled={savingI}>
