@@ -30,7 +30,7 @@ export const Route = createFileRoute("/app/agente/avancado")({
 });
 
 const DEFAULTS: any = {
-  ai_provider: "gemini", ai_model: "google/gemini-2.5-flash",
+  ai_provider: "gemini", ai_model: "google/gemini-2.5-flash", gemini_api_key: "",
   openai_api_key: "", anthropic_api_key: "",
   nome_agente: "Atendente Virtual", nome_empresa: "",
   papel_objetivo: "Atender clientes, descobrir o que precisam, recomendar com sentido e ajudar a fechar a venda.",
@@ -117,6 +117,7 @@ function AgentePage() {
   const gStart = useServerFn(startGoogleOAuth);
   const gDisc = useServerFn(disconnectGoogle);
   const plan = usePlanFeatures();
+  const ownKey = plan.features.iaChavePropria;
   const allowOpenAI = plan.features.providersIA.includes("openai");
   const allowAnthropic = plan.features.providersIA.includes("anthropic");
   const allowGoogleCal = plan.features.googleCalendar;
@@ -232,7 +233,7 @@ function AgentePage() {
                   <Select value={cfg.ai_provider} onValueChange={(v) => { up("ai_provider", v); up("ai_model", PROVIDER_MODELS[v]?.[0]?.value || ""); }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="gemini">Google Gemini — incluso, sem custo extra</SelectItem>
+                      <SelectItem value="gemini">Google Gemini{ownKey ? " — sua chave" : " — incluso, sem custo extra"}</SelectItem>
                       <SelectItem value="openai" disabled={!allowOpenAI}>
                         OpenAI (GPT) — sua chave{!allowOpenAI ? " · Pro/Business" : ""}
                       </SelectItem>
@@ -242,8 +243,9 @@ function AgentePage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Gemini é o padrão e já vem incluso. {(!allowOpenAI || !allowAnthropic) && (
-                      <>GPT e Claude exigem o plano Pro. <Link to="/app/checkout" className="underline">Fazer upgrade</Link>.</>
+                    {ownKey
+                      ? "No seu plano, a IA usa a sua própria chave do Google Gemini — o custo de uso é da sua conta Google."
+                      : "Gemini é o padrão e já vem incluso."} {(!allowOpenAI || !allowAnthropic) && (>GPT e Claude exigem o plano Pro. <Link to="/app/checkout" className="underline">Fazer upgrade</Link>.</>
                     )}
                   </p>
                 </div>
@@ -259,8 +261,14 @@ function AgentePage() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {cfg.ai_provider === "openai" && (
+              {cfg.ai_provider === "gemini" && ownKey && (
+      <div className="space-y-1.5">
+      <Label>Sua chave Gemini (AIza...)</Label>
+        <Input type="password" value={cfg.gemini_api_key || ""} onChange={(e) => up("gemini_api_key", e.target.value)} placeholder="AIza..." />
+        <p className="text-xs text-muted-foreground">Grátis pra criar em aistudio.google.com → "Get API key". A chave fica salva só pra sua empresa e o custo de uso é da sua conta Google.</p></p>
+      </div>
+      )}
+      {cfg.ai_provider === "openai" && (
                   <div className="space-y-1.5">
                     <Label>Chave OpenAI (sk-...)</Label>
                     <Input type="password" value={cfg.openai_api_key} onChange={(e) => up("openai_api_key", e.target.value)} placeholder="sk-..." />
