@@ -3,7 +3,7 @@ import { HelpTip } from "@/components/help-tip";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { brand } from "@/config/brand";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -91,16 +91,19 @@ function RelatoriosPage() {
 
   const perDay = useMemo(() => {
     const days = Math.min(30, Math.max(1, Math.ceil((+range.end - +range.start) / 86400000)));
-    const map = new Map<string, number>();
+    const map = new Map<string, { recebidas: number; respondidasIa: number }>();
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(range.end.getTime() - i * 86400000);
-      map.set(d.toISOString().slice(0, 10), 0);
+      map.set(d.toISOString().slice(0, 10), { recebidas: 0, respondidasIa: 0 });
     }
     msgs.forEach((m) => {
       const k = new Date(m.created_at).toISOString().slice(0, 10);
-      if (map.has(k)) map.set(k, (map.get(k) ?? 0) + 1);
+      const cur = map.get(k);
+      if (!cur) return;
+      if (m.direcao === "entrada") cur.recebidas += 1;
+      if (m.autor === "ia") cur.respondidasIa += 1;
     });
-    return Array.from(map.entries()).map(([d, v]) => ({ dia: d.slice(5), mensagens: v }));
+    return Array.from(map.entries()).map(([d, v]) => ({ dia: d.slice(5), ...v }));
   }, [msgs, range.start.getTime(), range.end.getTime()]);
 
   const byStage = useMemo(() => {
@@ -126,10 +129,24 @@ function RelatoriosPage() {
         cur.ganhos += 1; map.set(c.owner_id, cur);
       }
     });
-    return members.map((m) => ({
-      nome: (m.nome || m.email || m.user_id.slice(0, 6)) as string,
-      ...(map.get(m.user_id) ?? { recebidas: 0, respondidas: 0, ganhos: 0 }),
-    })).filter((r) => r.recebidas + r.respondidas + r.ganhos > 0);
+    const humanos = members.map((m) => {
+      const v = map.get(m.user_id) ?? { recebidas: 0, respondidas: 0, ganhos: 0 };
+      return {
+        nome: (m.nome || m.email || m.user_id.slice(0, 6)) as string,
+        ...v,
+        taxa: v.recebidas ? Math.round((v.ganhos / v.recebidas) * 100) : 0,
+        ia: false,
+      };
+    }).filter((r) => r.recebidas + r.respondidas + r.ganhos > 0);
+    const iaRow = {
+      nome: "Agente IA",
+      recebidas: msgs.filter((m) => m.direcao === "entrada").length,
+      respondidas: respIa,
+      ganhos: 0,
+      taxa: 0,
+      ia: true,
+    };
+    return iaRow.recebidas + iaRow.respondidas > 0 ? [iaRow, ...humanos] : humanos;
   }, [msgs, cards, members, stageMap]);
 
   function exportCSV() {
@@ -149,8 +166,8 @@ function RelatoriosPage() {
     lines.push("Etapa;Cards");
     byStage.forEach((s) => lines.push(`${s.name};${s.value}`));
     lines.push("");
-    lines.push("Atendente;Recebidas;Respondidas;Ganhos");
-    byAtendente.forEach((a) => lines.push(`${a.nome};${a.recebidas};${a.respondidas};${a.ganhos}`));
+    lines.push("Atendente;Recebidas;Respondidas;Ganhos;Taxa (%)");
+    byAtendente.forEach((a) => lines.push(`${a.nome};${a.recebidas};${a.respondidas};${a.ia ? "-" : a.ganhos};${a.ia ? "-" : a.taxa}`));
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -183,8 +200,9 @@ function RelatoriosPage() {
         </div>
       </header>
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
-        <KpiCard accent icon={<MessageCircle className="size-4" />} label="Mensagens" value={totalMsgs} trend={`${respIa} pela IA`} />
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+        <KpiCard accent icon={<MessageCircle className="size-4" />} label="Mensagens" value={totalMsgs} trend="no período" />
+        <KpiCard icon={<Bot className="size-4" />} label="IA respondeu" value={respIa} trend={`${totalMsgs ? Math.round((respIa / totalMsgs) * 100) : 0}% das mensagens`} />
         <KpiCard icon={<Clock className="size-4" />} label="Tempo médio resposta" value={tempoMedioMs ? `${Math.round(tempoMedioMs / 1000)}s` : "—"} trend="estimado entrada → saída" />
         <KpiCard icon={<Target className="size-4" />} label="Conversão" value={`${conversao}%`} trend={`${ganho.length} ganhos / ${cards.length} cards`} />
         <KpiCard icon={<DollarSign className="size-4" />} label="Receita" value={`R$ ${receita.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} trend="cards em etapas de ganho" />
@@ -194,37 +212,42 @@ function RelatoriosPage() {
       <div className="grid lg:grid-cols-[1.6fr_1fr] gap-5">
         <div className="rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--panel)] p-6">
           <h3 className="font-display text-[17px] font-semibold">Mensagens por dia</h3>
-          <p className="text-xs text-muted-foreground mb-3">no período selecionado</p>
+          <p className="text-xs text-muted-foreground mb-3">recebidas vs respondidas pela IA</p>
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={perDay}>
+            <AreaChart data={perDay}>
               <CartesianGrid strokeDasharray="3 3" stroke="color-mix(in oklab, currentColor 12%, transparent)" />
               <XAxis dataKey="dia" fontSize={11} stroke="currentColor" opacity={0.6} />
               <YAxis fontSize={11} allowDecimals={false} stroke="currentColor" opacity={0.6} />
-              <Tooltip contentStyle={tooltipStyle as any} cursor={{ fill: "color-mix(in oklab, currentColor 6%, transparent)" }} />
-              <Bar dataKey="mensagens" radius={[6, 6, 0, 0]} fill={brand.primary} />
-            </BarChart>
+              <Tooltip contentStyle={tooltipStyle as any} />
+              <Area type="monotone" dataKey="recebidas" name="Recebidas" stroke={brand.primary} fill={brand.primary} fillOpacity={0.25} strokeWidth={2} />
+              <Area type="monotone" dataKey="respondidasIa" name="Respondidas pela IA" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.25} strokeWidth={2} />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
         <div className="rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--panel)] p-6">
           <h3 className="font-display text-[17px] font-semibold">Distribuição por etapa</h3>
           <p className="text-xs text-muted-foreground mb-3">cards no funil</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={byStage} dataKey="value" nameKey="name" outerRadius={80} innerRadius={45} paddingAngle={2}>
-                {byStage.map((e, i) => <Cell key={i} fill={e.fill} stroke="var(--panel)" strokeWidth={2} />)}
-              </Pie>
-              <Tooltip contentStyle={tooltipStyle as any} />
-            </PieChart>
-          </ResponsiveContainer>
-          <ul className="mt-2 space-y-1.5">
-            {byStage.map((s) => (
-              <li key={s.name} className="flex items-center gap-2 text-[13px]">
-                <span className="size-2.5 rounded-full" style={{ background: s.fill }} />
-                <span className="text-muted-foreground">{s.name}</span>
-                <span className="ml-auto font-semibold">{s.value}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-3">
+            {byStage.map((s) => {
+              const total = byStage.reduce((a, b) => a + b.value, 0) || 1;
+              const pct = Math.round((s.value / total) * 100);
+              return (
+                <div key={s.name}>
+                  <div className="flex items-center gap-2 text-[13px] mb-1">
+                    <span className="size-2.5 rounded-full" style={{ background: s.fill }} />
+                    <span className="text-muted-foreground">{s.name}</span>
+                    <span className="ml-auto font-semibold">{s.value} · {pct}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-[color:var(--panel-2)] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.fill }} />
+                  </div>
+                </div>
+              );
+            })}
+            {byStage.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">Sem etapas cadastradas.</p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -237,19 +260,32 @@ function RelatoriosPage() {
           <Bot className="size-4 text-muted-foreground" />
         </div>
         {byAtendente.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">Sem atividade humana no período.</p>
+          <p className="text-sm text-muted-foreground text-center py-8">Sem atividade no período.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={Math.max(160, byAtendente.length * 50)}>
-            <BarChart data={byAtendente} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="color-mix(in oklab, currentColor 12%, transparent)" />
-              <XAxis type="number" fontSize={11} stroke="currentColor" opacity={0.6} />
-              <YAxis type="category" dataKey="nome" width={120} fontSize={12} stroke="currentColor" opacity={0.8} />
-              <Tooltip contentStyle={tooltipStyle as any} />
-              <Bar dataKey="recebidas" fill="#8AA89A" radius={[0, 6, 6, 0]} />
-              <Bar dataKey="respondidas" fill={brand.primary} radius={[0, 6, 6, 0]} />
-              <Bar dataKey="ganhos" fill="#22B85F" radius={[0, 6, 6, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b border-[color:var(--hairline)]">
+                  <th className="py-2 pr-3 font-semibold">Atendente</th>
+                  <th className="py-2 px-3 font-semibold text-right">Recebidas</th>
+                  <th className="py-2 px-3 font-semibold text-right">Respondidas</th>
+                  <th className="py-2 px-3 font-semibold text-right">Ganhos</th>
+                  <th className="py-2 pl-3 font-semibold text-right">Taxa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byAtendente.map((a) => (
+                  <tr key={a.nome} className="border-b border-[color:var(--hairline)] last:border-0">
+                    <td className="py-2.5 pr-3 font-medium">{a.nome}</td>
+                    <td className="py-2.5 px-3 text-right tabular-nums">{a.recebidas}</td>
+                    <td className="py-2.5 px-3 text-right tabular-nums">{a.respondidas}</td>
+                    <td className="py-2.5 px-3 text-right tabular-nums">{a.ia ? "—" : a.ganhos}</td>
+                    <td className="py-2.5 pl-3 text-right tabular-nums">{a.ia ? "—" : `${a.taxa}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
