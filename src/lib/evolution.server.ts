@@ -198,6 +198,16 @@ export async function evoSendPresence(instanceName: string, number: string, pres
   }
 }
 
+// Evolution v2: POST /chat/getBase64FromMediaMessage/{instance} — recebe o objeto da mensagem (o "data" do webhook) e devolve o base64 da mídia.
+export async function evoGetMediaBase64(instanceName: string, messageData: any, apiKey?: string): Promise<string | null> {
+  try {
+    const data: any = await evo(`/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`, { method: "POST", json: messageData, apiKey });
+    const b64 = data?.base64 || data?.data?.base64 || null;
+    return typeof b64 === "string" && b64.length > 100 ? b64 : null;
+  } catch {
+    return null;
+  }
+}
 export async function evoLogout(instanceName: string, apiKey?: string) {
   return evo(`/instance/logout/${encodeURIComponent(instanceName)}`, { method: "DELETE", apiKey });
 }
