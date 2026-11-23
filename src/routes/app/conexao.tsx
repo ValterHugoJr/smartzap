@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, Power, QrCode } from "lucide-react";
+import { Loader2, RefreshCw, Power, QrCode, Smartphone } from "lucide-react";
 import { brand } from "@/config/brand";
 import { connectWhatsapp, checkWhatsappStatus, disconnectWhatsapp } from "@/lib/evolution.functions";
 import { usePlanFeatures } from "@/hooks/use-plan-features";
@@ -125,9 +125,11 @@ function ConexaoPage() {
 
         {qr ? (
           <div className="grid md:grid-cols-2 gap-6 items-center">
-            <div className="bg-white p-4 rounded-xl border border-border w-fit mx-auto">
-              <img src={qr} alt="QR Code WhatsApp" className="size-72 object-contain" />
-            </div>
+            <Card className="p-6 flex items-center justify-center w-fit mx-auto">
+              <div className="bg-white p-4 rounded-xl border border-border">
+                <img src={qr} alt="QR Code WhatsApp" className="size-72 object-contain" />
+              </div>
+            </Card>
             <div className="space-y-3 text-sm">
               <h3 className="font-semibold text-base">Como escanear</h3>
               <ol className="list-decimal pl-5 space-y-1.5 text-muted-foreground">
@@ -145,6 +147,16 @@ function ConexaoPage() {
           <div className="text-sm text-muted-foreground">Clique em <b>Conectar WhatsApp</b> para gerar o QR Code.</div>
         )}
       </Card>
+
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <h3 className="font-display text-[13px] font-semibold mb-3 flex items-center gap-2"><Smartphone className="size-4 text-[var(--brand-text)]" />Como funciona</h3>
+        <ol className="text-[13px] text-muted-foreground space-y-2 list-decimal pl-5">
+          <li>Você escaneia o QR Code com o WhatsApp do celular.</li>
+          <li>Mensagens recebidas viram conversas no inbox automaticamente.</li>
+          <li>O agente IA responde com o tom e regras configurados.</li>
+          <li>Você pode "Assumir" qualquer conversa quando quiser.</li>
+        </ol>
+      </div>
     </div>
   );
 }
