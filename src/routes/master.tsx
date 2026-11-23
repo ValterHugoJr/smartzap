@@ -1,8 +1,8 @@
 import { createFileRoute, Outlet, redirect, Link, useLocation } from "@tanstack/react-router";
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { brand } from "@/config/brand";
-import { Shield, LogOut, BarChart3, Building2, Plus, Settings, ArrowLeft, Package, CreditCard } from "lucide-react";
+import { Shield, LogOut, BarChart3, Building2, Plus, Settings, ArrowLeft, Package, CreditCard, ChevronDown, List } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileBottomNav, type MobileNavItem } from "@/components/mobile-bottom-nav";
 import { OWNER_USER_ID } from "@/lib/apresentacao.shared";
@@ -71,6 +71,9 @@ function MasterLayout() {
   const demoMode = isOwner && loc.pathname.startsWith("/master/apresentacao");
   const demoAba = ((loc.search as any)?.aba as string) || "painel";
   const onNovaEmpresa = loc.pathname.startsWith("/master/nova-empresa");
+  const onEmpresasArea = loc.pathname.startsWith("/master/empresas") || onNovaEmpresa;
+  const [empresasOpen, setEmpresasOpen] = useState<boolean | null>(null);
+  const empresasExpanded = empresasOpen ?? onEmpresasArea;
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden">
@@ -140,6 +143,58 @@ function MasterLayout() {
                     const aba = demoMode ? DEMO_ABA[it.to] : undefined;
                     const active = demoMode ? aba === demoAba : loc.pathname.startsWith(it.to);
                     const Icon = it.icon;
+                    if (it.to === "/master/empresas" && !demoMode) {
+                      return (
+                        <Fragment key={it.to}>
+                          <button
+                            type="button"
+                            onClick={() => setEmpresasOpen(!empresasExpanded)}
+                            className={`relative w-full flex items-center gap-3 px-3 py-[11px] rounded-lg text-[14.5px] font-medium whitespace-nowrap transition-all ${
+                              onEmpresasArea ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel-2)]"
+                            }`}
+                            style={
+                              onEmpresasArea
+                                ? {
+                                    background: RED_SOFT,
+                                    boxShadow: `inset 0 0 0 1px ${RED_SOFT_STRONG}, 0 0 22px -10px ${RED}`,
+                                  }
+                                : undefined
+                            }
+                          >
+                            {onEmpresasArea && (
+                              <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r" style={{ background: RED, boxShadow: `0 0 12px ${RED}` }} />
+                            )}
+                            <Icon className="size-[18px] shrink-0" style={onEmpresasArea ? { color: RED } : undefined} />
+                            <span className="flex-1 truncate text-left">{it.label}</span>
+                            <ChevronDown className={`size-4 shrink-0 transition-transform ${empresasExpanded ? "rotate-180" : ""}`} />
+                          </button>
+                          {empresasExpanded && (
+                            <>
+                              <Link
+                                to="/master/empresas"
+                                className={`relative flex items-center gap-2.5 ml-9 px-3 py-2 rounded-lg text-[13.5px] font-medium whitespace-nowrap transition-all ${
+                                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel-2)]"
+                                }`}
+                                style={active ? { background: RED_SOFT, boxShadow: `inset 0 0 0 1px ${RED_SOFT_STRONG}` } : undefined}
+                              >
+                                <List className="size-4 shrink-0" style={active ? { color: RED } : undefined} />
+                                <span className="flex-1 truncate">Todas as empresas</span>
+                              </Link>
+                              <Link
+                                to="/master/nova-empresa"
+                                className={`relative flex items-center gap-2.5 ml-9 px-3 py-2 rounded-lg text-[13.5px] font-medium whitespace-nowrap transition-all ${
+                                  onNovaEmpresa ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel-2)]"
+                                }`}
+                                style={onNovaEmpresa ? { background: RED_SOFT, boxShadow: `inset 0 0 0 1px ${RED_SOFT_STRONG}` } : undefined}
+                              >
+                                <Plus className="size-4 shrink-0" style={onNovaEmpresa ? { color: RED } : undefined} />
+                                <span className="flex-1 truncate">Cadastrar empresa</span>
+                              </Link>
+                            </>
+                          )}
+                        </Fragment>
+                      );
+                    }
                     return (
                       <Fragment key={it.to}>
                       <Link
@@ -164,18 +219,6 @@ function MasterLayout() {
                         <Icon className="size-[18px] shrink-0" style={active ? { color: RED } : undefined} />
                         <span className="flex-1 truncate">{it.label}</span>
                       </Link>
-                      {it.to === "/master/empresas" && (
-                        <Link
-                          to="/master/nova-empresa"
-                          className={`relative flex items-center gap-2.5 ml-9 px-3 py-2 rounded-lg text-[13.5px] font-medium whitespace-nowrap transition-all ${
-                            onNovaEmpresa ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel-2)]"
-                          }`}
-                          style={onNovaEmpresa ? { background: RED_SOFT, boxShadow: `inset 0 0 0 1px ${RED_SOFT_STRONG}` } : undefined}
-                        >
-                          <Plus className="size-4 shrink-0" style={onNovaEmpresa ? { color: RED } : undefined} />
-                          <span className="flex-1 truncate">Cadastrar empresa</span>
-                        </Link>
-                      )}
                       </Fragment>
                     );
                   })}
