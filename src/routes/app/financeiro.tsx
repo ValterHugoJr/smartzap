@@ -211,6 +211,19 @@ function FinanceiroContent({ diasVenc: _diasVenc }: { diasVenc: number }) {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl p-4 border bg-[color:var(--brand-soft)]/40 flex items-start gap-3 flex-wrap">
+        <Lock className="size-5 text-[color:var(--brand-text)] mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold flex items-center gap-2">
+            Módulo Financeiro
+            <Badge style={{ background: "var(--brand-soft)", color: "var(--brand-text)" }}>Pro & Business</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Disponível nos planos <b>Pro</b> e <b>Business</b>. Pode ser ativado ou desativado pela empresa quando quiser — para quem já usa outro sistema financeiro, basta deixar desativado.
+          </p>
+        </div>
+      </div>
+
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -432,6 +445,9 @@ function CategoriasTab({ cats, reload }: { cats: any[]; reload: () => void }) {
 
   return (
     <div className="space-y-3 max-w-3xl">
+      <Card className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
+        <Sparkles className="size-4" /> Categorias padrão criadas ao ativar o módulo. Edite à vontade.
+      </Card>
       <Card className="p-4 space-y-2">
         <h2 className="font-semibold">Nova categoria</h2>
         <div className="flex gap-2 flex-wrap">
