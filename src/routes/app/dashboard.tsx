@@ -3,7 +3,7 @@ import { HelpTip } from "@/components/help-tip";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { brand } from "@/config/brand";
-import { Bot, KanbanSquare, MessageCircle, Target, Trophy, AlertTriangle, Clock, UserPlus, DollarSign } from "lucide-react";
+import { Bot, KanbanSquare, MessageCircle, Target, AlertTriangle, Clock, UserPlus, DollarSign, Star } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { MiniAreaChart, type AreaPoint } from "@/components/dashboard/mini-area-chart";
 import { MessageTimeline, type TimelineItem } from "@/components/dashboard/message-timeline";
@@ -20,6 +20,7 @@ type Period = "today" | "7d" | "30d" | "custom";
 interface Stats {
   conversas: number; negociando: number; ganho: number; perda: number;
   respondidasIa: number; recebidas: number; receita: number;
+  csatMedia: number; csatQtd: number;
 }
 
 function periodRange(p: Period, from?: string, to?: string): { start: Date; end: Date; days: number } {
@@ -42,7 +43,7 @@ function Dashboard() {
   const [period, setPeriod] = useState<Period>("7d");
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
-  const [stats, setStats] = useState<Stats>({ conversas: 0, negociando: 0, ganho: 0, perda: 0, respondidasIa: 0, recebidas: 0, receita: 0 });
+  const [stats, setStats] = useState<Stats>({ conversas: 0, negociando: 0, ganho: 0, perda: 0, respondidasIa: 0, recebidas: 0, receita: 0, csatMedia: 0, csatQtd: 0 });
   const [series, setSeries] = useState<AreaPoint[]>([]);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [paradas, setParadas] = useState<{ numero: string; nome: string | null; min: number }[]>([]);
@@ -56,19 +57,23 @@ function Dashboard() {
   async function load(cid: string, r: { start: Date; end: Date; days: number }) {
     const startISO = r.start.toISOString();
     const endISO = r.end.toISOString();
-    const [{ data: inst }, { data: cards }, { data: stages }, { data: msgs }, { data: last }, { data: cardsNew }] = await Promise.all([
+    const [{ data: inst }, { data: cards }, { data: stages }, { data: msgs }, { data: last }, { data: cardsNew }, { data: csat }] = await Promise.all([
       supabase.from("whatsapp_instances").select("status").eq("company_id", cid).maybeSingle(),
       supabase.from("crm_cards").select("status,stage_id,valor,ultima_em,nome,numero").eq("company_id", cid),
       supabase.from("crm_stage").select("id,tipo").eq("company_id", cid),
       supabase.from("mensagens").select("direcao,autor,created_at,numero,contato_nome").eq("company_id", cid).gte("created_at", startISO).lte("created_at", endISO),
       supabase.from("mensagens").select("id,numero,contato_nome,direcao,autor,texto,created_at").eq("company_id", cid).order("created_at", { ascending: false }).limit(8),
       supabase.from("crm_cards").select("id").eq("company_id", cid).gte("ultima_em", startISO),
+      supabase.from("csat_response").select("score").eq("company_id", cid).gte("enviado_em", startISO).lte("enviado_em", endISO),
     ]);
 
     setStatus(((inst?.status as any) || "disconnected"));
 
     const stageMap = new Map((stages ?? []).map((s: any) => [s.id, s.tipo as string]));
-    const s: Stats = { conversas: 0, negociando: 0, ganho: 0, perda: 0, respondidasIa: 0, recebidas: 0, receita: 0 };
+    const s: Stats = { conversas: 0, negociando: 0, ganho: 0, perda: 0, respondidasIa: 0, recebidas: 0, receita: 0, csatMedia: 0, csatQtd: 0 };
+    const csatResp = (csat ?? []).filter((r: any) => r.score != null);
+    s.csatQtd = csatResp.length;
+    s.csatMedia = csatResp.length ? csatResp.reduce((a: number, r: any) => a + Number(r.score ?? 0), 0) / csatResp.length : 0;
     (cards ?? []).forEach((c: any) => {
       const t = c.stage_id ? stageMap.get(c.stage_id) : null;
       if (t === "ganho") { s.ganho += 1; s.receita += Number(c.valor ?? 0); }
@@ -151,18 +156,18 @@ function Dashboard() {
         <PeriodPicker value={period} onChange={setPeriod} from={from} to={to} setFrom={setFrom} setTo={setTo} status={status} />
       </header>
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard accent icon={<MessageCircle className="size-4" />} label="Conversas" value={totalConv} trend={`${stats.recebidas} recebidas`} />
-        <KpiCard icon={<Bot className="size-4" />} label="Resolvidas pela IA" value={stats.respondidasIa} trend={`${taxaIa}% no automático`} />
+        <KpiCard icon={<Bot className="size-4" />} label="IA respondeu" value={stats.respondidasIa} trend={`${taxaIa}% no automático`} />
         <KpiCard icon={<Target className="size-4" />} label="Em negociação" value={stats.negociando} trend={`${stats.conversas} em conversa`} />
         <KpiCard icon={<DollarSign className="size-4" />} label="Receita (ganhos)" value={`R$ ${stats.receita.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} trend={`${stats.ganho} ganhos`} />
+        <KpiCard icon={<Star className="size-4" />} label="CSAT médio" value={stats.csatQtd ? `${stats.csatMedia.toFixed(1)}/5` : "—"} trend={`${stats.csatQtd} avaliações`} />
       </div>
 
       <div className="grid lg:grid-cols-[1.6fr_1fr] gap-5">
         <div className="rounded-2xl border border-[color:var(--hairline)] bg-[color:var(--panel)] p-6">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="font-display text-[17px] font-semibold">Atendimentos</h3>
-            <Trophy className="size-4 text-muted-foreground" />
+            <h3 className="font-display text-[17px] font-semibold">Atendimentos · {labelPeriod(period, range)}</h3>
           </div>
           <p className="text-xs text-muted-foreground mb-4">recebidas vs respondidas pela IA</p>
           <MiniAreaChart data={series} />
@@ -179,6 +184,10 @@ function Dashboard() {
           <KanbanSquare className="size-4 text-muted-foreground" />
         </div>
         <MessageTimeline items={timeline} empty="Conecte o WhatsApp para começar a ver conversas." />
+      </div>
+
+      <div className="text-[11px] text-muted-foreground">
+        Funil resumido: <b>{stats.conversas}</b> em conversa · <b>{stats.negociando}</b> negociando · <b>{stats.ganho}</b> ganhos · <b>{stats.perda}</b> perdas.
       </div>
     </div>
   );
