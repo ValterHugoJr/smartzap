@@ -10,13 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Save, CreditCard, Sparkles, AlertTriangle, Download, Shield, Wallet, Lock, Upload } from "lucide-react";
+import { Loader2, Save, CreditCard, Sparkles, AlertTriangle, Download, Shield, Wallet, Lock, Upload, Smartphone, CheckCircle2 } from "lucide-react";
 import { brand } from "@/config/brand";
 import { trialDaysLeft } from "@/lib/tenant";
 import { TemplatesTab } from "@/components/config/templates-tab";
 import { HorariosTab } from "@/components/config/horarios-tab";
 import { listAuditLog, exportLgpd } from "@/lib/security.functions";
 import { finStatus, enableFinanceiro } from "@/lib/financeiro.functions";
+import { featuresFor } from "@/lib/plan-features";
 
 export const Route = createFileRoute("/app/configuracoes")({
   head: () => ({ meta: [{ title: `${brand.name} — Configurações` }] }),
@@ -57,7 +58,7 @@ function ConfigPage() {
       void (async () => {
         const { data } = await supabase
           .from("subscription")
-          .select("*, plan:plan(id,nome,preco_cents,moeda,intervalo)")
+          .select("*, plan:plan(id,nome,slug,preco_cents,moeda,intervalo,limite_mensagens,limite_usuarios,limite_contatos,limite_instancias)")
           .eq("company_id", companyId)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -135,13 +136,14 @@ function ConfigPage() {
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">Configurações <HelpTip text="Dados da empresa, templates de resposta rápida, horário de atendimento, segurança, log de auditoria e exportação LGPD." /></h1>
         <p className="text-sm text-muted-foreground">Empresa, identidade e perfil.</p>
       </div>
-      <Tabs defaultValue="plano">
+      <Tabs defaultValue="empresa">
         <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="plano">Plano</TabsTrigger>
           <TabsTrigger value="empresa">Empresa</TabsTrigger>
           <TabsTrigger value="identidade">Identidade</TabsTrigger>
+          <TabsTrigger value="plano">Plano</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="horarios">Horários</TabsTrigger>
+          <TabsTrigger value="conexao">Conexão</TabsTrigger>
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="perfil">Perfil</TabsTrigger>
           <TabsTrigger value="seguranca">Segurança</TabsTrigger>
@@ -166,6 +168,10 @@ function ConfigPage() {
 
         <TabsContent value="horarios">
           <HorariosTab />
+        </TabsContent>
+
+        <TabsContent value="conexao">
+          <ConexaoTab companyId={companyId} telefone={company?.telefone} />
         </TabsContent>
 
 
@@ -210,6 +216,11 @@ function ConfigPage() {
               </div>
               <Input value={identidade.logo_url} onChange={(e) => setIdentidade({ ...identidade, logo_url: e.target.value })} placeholder="…ou cole a URL do logo" className="mt-2" />
             </div>
+            <div>
+              <Label>Slug público</Label>
+              <Input value={company?.slug ?? ""} readOnly placeholder="—" className="mt-1" />
+              <p className="text-[11px] text-muted-foreground mt-1">Identificador público da sua empresa, gerado automaticamente no cadastro.</p>
+            </div>
             <div className="flex justify-end">
               <Button onClick={saveIdentidade} disabled={savingI}>
                 {savingI ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Save className="size-4 mr-1.5" />} Salvar
@@ -244,6 +255,49 @@ function ConfigPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function ConexaoTab({ companyId, telefone }: { companyId?: string; telefone?: string | null }) {
+  const [inst, setInst] = useState<any>(null);
+  const [loadingInst, setLoadingInst] = useState(true);
+
+  useEffect(() => {
+    if (!companyId) { setLoadingInst(false); return; }
+    void (async () => {
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("status,numero,instance_name,updated_at")
+        .eq("company_id", companyId)
+        .maybeSingle();
+      setInst(data);
+      setLoadingInst(false);
+    })();
+  }, [companyId]);
+
+  const conectado = inst?.status === "connected";
+  const conectando = inst?.status === "connecting";
+
+  return (
+    <Card className="p-5 space-y-4 max-w-xl">
+      <h2 className="font-semibold flex items-center gap-2"><Smartphone className="size-4" /> Conexão WhatsApp</h2>
+      {loadingInst ? (
+        <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Carregando…</div>
+      ) : (
+        <div className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--panel-2)] p-4 flex items-center gap-3">
+          <div className={`size-10 rounded-full grid place-items-center shrink-0 ${conectado ? "bg-[var(--brand)]/20 text-[var(--brand-text)]" : "bg-muted text-muted-foreground"}`}>             {conectado ? <CheckCircle2 className="size-5" /> : <Smartphone className="size-5" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm">{conectado ? "Conectado" : conectando ? "Conectando…" : "Desconectado"}</div>
+            <div className="text-[11px] text-muted-foreground font-mono truncate">{inst?.numero || telefone || "Número não identificado"}</div>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/app/conexao">{conectado ? "Gerenciar" : "Conectar"}</Link>
+          </Button>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">Para conectar, trocar de número ou desconectar, use a tela de Conexão.</p>
+    </Card>
   );
 }
 
@@ -440,6 +494,7 @@ function fmtBRL(cents: number, moeda = "BRL") {
 
 function PlanoCard({ company, sub }: { company: any; sub: any }) {
   const status = company?.status_cobranca as string | undefined;
+  const feats = featuresFor(sub?.plan?.slug);
   const trialEnd = sub?.trial_ends_at ?? company?.trial_ate ?? null;
   const days = trialEnd ? trialDaysLeft(trialEnd) : 0;
   const isTrial = status === "trial" || sub?.status === "trialing";
@@ -470,6 +525,25 @@ function PlanoCard({ company, sub }: { company: any; sub: any }) {
           </>
         ) : (
           <div className="text-sm text-muted-foreground">Nenhum plano vinculado ainda.</div>
+        )}
+
+        {sub?.plan && (
+          <ul className="text-[12.5px] text-muted-foreground space-y-1">
+            <li>• {Number(sub.plan.limite_mensagens ?? 0).toLocaleString("pt-BR")} mensagens/mês</li>
+            <li>• Até {sub.plan.limite_usuarios} {Number(sub.plan.limite_usuarios) === 1 ? "atendente" : "atendentes"}</li>
+            <li>• {Number(sub.plan.limite_contatos ?? 0).toLocaleString("pt-BR")} contatos no CRM</li>
+            {feats.googleCalendar && <li>• Google Agenda + agendamento automático</li>}
+            {feats.financeiro && <li>• Módulo Financeiro</li>}
+            {feats.apiWebhooks && <li>• API pública + Webhooks de saída</li>}
+            {feats.suportePrioritario && <li>• Suporte prioritário</li>}
+          </ul>
+        )}
+
+        {isActive && sub?.current_period_end && status !== "vitalicio" && (
+          <div className="text-sm">
+            <span className="text-muted-foreground">Próxima cobrança: </span>
+            <b>{new Date(sub.current_period_end).toLocaleDateString("pt-BR")}</b>
+          </div>
         )}
 
         {isTrial && (
