@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { brand } from "@/config/brand";
-import { Hand, MessageSquareText, Send, Sparkles, User, Search, Bot, ExternalLink, Star } from "lucide-react";
+import { Hand, MessageSquareText, Send, Sparkles, User, Search, Bot, ExternalLink, Star, Bell } from "lucide-react";
 import { sendCsat } from "@/lib/csat.functions";
 import { toast } from "sonner";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { sendWhatsappText, setContactIaActive } from "@/lib/evolution.functions";
+import { AuthorBadge } from "@/components/dashboard/message-timeline";
 import { LeadDrawer, type LeadCard, type Stage, type Member } from "@/components/crm/lead-drawer";
 import { listTemplates, type MessageTemplate } from "@/lib/templates.functions";
 
@@ -170,6 +171,11 @@ function ConversasPage() {
     return list.sort((a, b) => +new Date(b.last.created_at) - +new Date(a.last.created_at));
   }, [msgs, search, filter, unread, cards, pauses, stages, userId]);
 
+  // Abre a tela já com a 1ª conversa selecionada
+  useEffect(() => {
+    if (!active && conversations.length > 0) setActive(conversations[0].numero);
+  }, [conversations, active]);
+
   const thread = useMemo(() =>
     [...msgs].filter((m) => m.numero === active).sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at)),
     [msgs, active]);
@@ -249,19 +255,22 @@ function ConversasPage() {
           <h1 className="font-display text-[26px] font-extrabold tracking-tight flex items-center gap-2">Conversas <HelpTip text="Caixa de entrada unificada do WhatsApp. Filtre por status, assuma um atendimento manualmente, envie CSAT e responda em nome do agente." /></h1>
           <p className="text-sm text-muted-foreground">Inbox em tempo real do WhatsApp</p>
         </div>
-        <FilterTabs value={filter} onChange={setFilter} counts={{
-          nao_lidas: Object.values(unread).reduce((a, b) => a + b, 0),
-        }} />
+        <div className="hidden sm:flex items-center gap-1.5 text-[11.5px] text-muted-foreground bg-[color:var(--panel)] border border-[color:var(--hairline)] px-2.5 py-1 rounded-full">
+          <Bell className="size-3" /> Notificações ativadas
+        </div>
       </header>
 
       <div className="grid md:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_300px] border border-[color:var(--hairline)] rounded-2xl overflow-hidden h-[calc(100vh-200px)] min-h-[500px] bg-[color:var(--panel)]">
         {/* LISTA */}
         <aside className="border-r border-[color:var(--hairline)] flex flex-col min-h-0 bg-[color:var(--panel)]">
-          <div className="p-3 border-b border-[color:var(--hairline)]">
+          <div className="p-3 border-b border-[color:var(--hairline)] space-y-2.5">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input placeholder="Buscar contato…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
             </div>
+            <FilterTabs value={filter} onChange={setFilter} counts={{
+              nao_lidas: Object.values(unread).reduce((a, b) => a + b, 0),
+            }} />
           </div>
           <ul className="flex-1 overflow-auto">
             {conversations.length === 0 && (
@@ -299,6 +308,13 @@ function ConversasPage() {
                           </span>
                         )}
                       </div>
+                      {(cards[c.numero]?.tags ?? []).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {(cards[c.numero]?.tags ?? []).map((t) => (
+                            <span key={t} className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--panel-2)] text-muted-foreground border border-[color:var(--hairline)]">{t}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </button>
                 </li>
@@ -441,6 +457,12 @@ function ConversasPage() {
                   </div>
                 </div>
               )}
+              {activeCard?.valor != null && (
+                <div>
+                  <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground mb-1.5 font-semibold">Valor estimado</div>
+                  <div className="font-display font-extrabold text-lg text-[color:var(--brand-text)]">R$ {Number(activeCard.valor).toLocaleString("pt-BR")}</div>
+                </div>
+              )}
               {activeCard?.observacao && (
                 <div>
                   <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground mb-1.5 font-semibold">Observações</div>
@@ -480,7 +502,7 @@ function FilterTabs({ value, onChange, counts }: { value: Filter; onChange: (f: 
     { v: "resolvidas", label: "Resolvidas" },
   ];
   return (
-    <div className="inline-flex flex-wrap rounded-lg border border-[color:var(--hairline)] bg-[color:var(--panel)] p-1">
+    <div className="flex flex-wrap rounded-lg border border-[color:var(--hairline)] bg-[color:var(--panel)] p-1">
       {opts.map((o) => (
         <button key={o.v} onClick={() => onChange(o.v)}
           className={`px-3 py-1.5 text-[13px] font-semibold rounded-md transition-colors flex items-center gap-1.5 ${
@@ -511,6 +533,7 @@ function Bubble({ m }: { m: Msg }) {
             {ia ? "⚡ Agente IA" : "Atendente"}
           </span>
         )}
+        {!isOut && <span className="block mb-1"><AuthorBadge autor={m.autor} /></span>}
         <div className="whitespace-pre-wrap break-words">{m.texto}</div>
         <div className={`text-[10.5px] mt-1 ${isOut ? "opacity-70" : "text-muted-foreground"}`}>
           {new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
