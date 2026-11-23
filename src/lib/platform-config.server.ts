@@ -10,12 +10,14 @@ export interface PlatformConfig {
   evolutionUrl: string;
   evolutionKey: string;
   geminiKey: string;
+  groqKey: string;
   googleClientId: string;
   googleClientSecret: string;
   sources: {
     evolutionUrl: PlatformSource;
     evolutionKey: PlatformSource;
     geminiKey: PlatformSource;
+    groqKey: PlatformSource;
     googleClientId: PlatformSource;
     googleClientSecret: PlatformSource;
   };
@@ -42,20 +44,23 @@ export async function getPlatformConfig(): Promise<PlatformConfig> {
   const evoUrl = pick(row?.evolution_api_url, process.env.EVOLUTION_API_URL);
   const evoKey = pick(row?.evolution_api_key, process.env.EVOLUTION_API_KEY);
   const gem = pick(row?.gemini_api_key, process.env.GEMINI_API_KEY);
+  const grq = pick(row?.groq_api_key, process.env.GROQ_API_KEY);
   const gid = pick(row?.google_client_id, process.env.GOOGLE_CLIENT_ID);
   const gsec = pick(row?.google_client_secret, process.env.GOOGLE_CLIENT_SECRET);
   const cfg: PlatformConfig = {
     evolutionUrl: evoUrl.value.replace(/\/+$/, ""),
     evolutionKey: evoKey.value,
     geminiKey: gem.value,
+    groqKey: grq.value,
     googleClientId: gid.value,
     googleClientSecret: gsec.value,
     sources: {
       evolutionUrl: evoUrl.source,
       evolutionKey: evoKey.source,
       geminiKey: gem.source,
+      groqKey: grq.source,
       googleClientId: gid.source,
-      googleClientSecret: gsec.source,
+      googleClientSecret: gcs.source,
     },
   };
   cache = { at: Date.now(), cfg };
