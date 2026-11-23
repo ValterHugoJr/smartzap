@@ -616,12 +616,13 @@ export const getPlatformIntegrations = createServerFn({ method: "POST" })
       evolutionUrl: { value: cfg.evolutionUrl, source: cfg.sources.evolutionUrl },
       evolutionKey: { configured: !!cfg.evolutionKey, hint: hint(cfg.evolutionKey), source: cfg.sources.evolutionKey },
       geminiKey: { configured: !!cfg.geminiKey, hint: hint(cfg.geminiKey), source: cfg.sources.geminiKey },
+      groqKey: { configured: !!cfg.groqKey, hint: hint(cfg.groqKey), source: cfg.sources.groqKey },
       googleClientId: { value: cfg.googleClientId, source: cfg.sources.googleClientId },
       googleClientSecret: { configured: !!cfg.googleClientSecret, hint: hint(cfg.googleClientSecret), source: cfg.sources.googleClientSecret },
     };
   });
 
-const INTEGRATION_FIELDS = ["evolution_api_url", "evolution_api_key", "gemini_api_key", "google_client_id", "google_client_secret"] as const;
+const INTEGRATION_FIELDS = ["evolution_api_url", "evolution_api_key", "gemini_api_key", "groq_api_key", "google_client_id", "google_client_secret"] as const;
 
 export const setPlatformIntegrations = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -629,6 +630,7 @@ export const setPlatformIntegrations = createServerFn({ method: "POST" })
     evolution_api_url?: string;
     evolution_api_key?: string;
     gemini_api_key?: string;
+    groq_api_key?: string;
     google_client_id?: string;
     google_client_secret?: string;
     clear?: string[];
