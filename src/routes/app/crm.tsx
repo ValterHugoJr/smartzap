@@ -248,7 +248,7 @@ function CardBody({ card, dragging }: { card: LeadCard; dragging?: boolean }) {
         </div>
       )}
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[var(--border)]">
-        {card.valor != null && Number(card.valor) > 0 && (
+        {card.valor != null && (
           <span className="font-display font-bold text-[14px] text-[var(--brand-text)]">
             R$ {Number(card.valor).toLocaleString("pt-BR")}
           </span>
