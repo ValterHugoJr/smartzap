@@ -5,7 +5,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { brand } from "@/config/brand";
 import { toast } from "sonner";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
@@ -133,13 +132,12 @@ function ContatosPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input placeholder="Buscar por nome ou número…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Select value={stageId} onValueChange={setStageId}>
-          <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os estágios</SelectItem>
-            {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex gap-1.5 flex-wrap">
+          <StageChip label="Todas" active={stageId === "todos"} onClick={() => setStageId("todos")} />
+          {stages.map((s) => (
+            <StageChip key={s.id} label={s.nome} color={s.cor} active={stageId === s.id} onClick={() => setStageId(s.id)} />
+          ))}
+        </div>
         <div className="text-sm text-muted-foreground ml-auto">{filtered.length} contatos</div>
       </div>
 
@@ -213,5 +211,21 @@ function ContatosPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function StageChip({ label, active, color, onClick }: { label: string; active: boolean; color?: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`text-[12px] font-semibold px-3 py-1.5 rounded-full border transition ${
+        active
+          ? "bg-[color:var(--brand-soft)] text-[color:var(--brand-text)] border-[color:var(--brand-soft-strong)]"
+          : "border-[color:var(--hairline)] text-muted-foreground hover:bg-[color:var(--panel-2)]"
+      }`}
+    >
+      {color && <span className="inline-block size-2 rounded-full mr-1.5 align-middle" style={{ background: color }} />}
+      {label}
+    </button>
   );
 }
