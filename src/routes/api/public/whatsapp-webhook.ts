@@ -7,7 +7,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
         try {
           const payload: any = await request.json().catch(() => ({}));
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-          const { evoSendText, evoSendPresence, evoSendMedia } = await import("@/lib/evolution.server");
+          const { evoSendText, evoSendPresence, evoSendMedia, evoGetMediaBase64 } = await import("@/lib/evolution.server");
           const { lovableAiChat, normalizeAiProvider } = await import("@/lib/lovable-ai.server");
           const { buildSystemPrompt, parseAiOutput } = await import("@/lib/ai-prompt");
 
@@ -32,13 +32,14 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const number = remoteJid.split("@")[0];
           const pushName: string | undefined = data?.pushName;
           const msg = data?.message ?? {};
-          const text: string =
+          let text: string =
             msg.conversation ||
             msg.extendedTextMessage?.text ||
             msg.imageMessage?.caption ||
             msg.videoMessage?.caption ||
             "";
-          if (!text || !text.trim()) return new Response("no text", { status: 200 });
+          const audioMsg: any = (msg as any).audioMessage || null;
+          if ((!text || !text.trim()) && !audioMsg) return new Response("no text", { status: 200 });
 
           const suppliedToken = new URL(request.url).searchParams.get("t") || request.headers.get("x-webhook-token") || "";
           const { data: inst } = await (supabaseAdmin as any)
@@ -53,6 +54,28 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const companyId = (inst as any).company_id as string;
           const userId = (inst as any).user_id as string;
           const instKey = (inst as any).api_key || undefined;
+          // Áudio do cliente: baixa a mídia pela Evolution e transcreve com o
+          // Whisper (Groq). A transcrição vira o texto da mensagem e a IA
+          // responde a partir dela. Se não der pra transcrever, a mensagem
+          // fica registrada com um aviso e a IA não responde (equipe assume).
+          let audioFalhou = false;
+          if ((!text || !text.trim()) && audioMsg) {
+            try {
+              const { transcribeAudioGroq } = await import("@/lib/transcribe.server");
+              const b64 = await evoGetMediaBase64(instanceName, data, instKey);
+              const transcricao = b64 ? await transcribeAudioGroq(b64, audioMsg?.mimetype) : null;
+              if (transcricao) {
+                text = `🎤 ${transcricao}`;
+              } else {
+                audioFalhou = true;
+                text = "🎤 Áudio recebido (transcrição indisponível)";
+              }
+            } catch (e: any) {
+              console.error("[audio]", e?.message);
+              audioFalhou = true;
+              text = "🎤 Áudio recebido (transcrição indisponível)";
+            }
+          }
 
           if (whatsappMessageId) {
             const { data: duplicate } = await (supabaseAdmin as any)
@@ -102,6 +125,17 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           } catch {}
 
 
+          if (audioFalhou) {
+            try {
+              const { data: stagesRows } = await supabaseAdmin
+                .from("crm_stage")
+                .select("id, nome, tipo, ordem")
+                .eq("company_id", companyId)
+                .order("ordem", { ascending: true });
+              await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, (stagesRows ?? []) as any);
+            } catch {}
+            return new Response("audio-no-transcript", { status: 200 });
+          }
           const { data: cfg } = await supabaseAdmin
             .from("agent_config")
             .select("*")
