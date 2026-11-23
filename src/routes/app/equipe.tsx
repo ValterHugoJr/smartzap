@@ -11,9 +11,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, UserPlus, Copy } from "lucide-react";
+import { Loader2, UserPlus, Copy, Check, X } from "lucide-react";
 import { brand } from "@/config/brand";
 import { listTeam, inviteMember, setMemberActive, setMemberRole } from "@/lib/team.functions";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { usePlanFeatures } from "@/hooks/use-plan-features";
 import { PlanUsageBadge } from "@/components/plan-usage-badge";
 
@@ -25,6 +26,24 @@ export const Route = createFileRoute("/app/equipe")({
   },
   component: EquipePage,
 });
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Dono",
+  admin: "Admin",
+  atendente: "Atendente",
+};
+
+const PAPEIS = ["Dono", "Admin", "Atendente"] as const;
+const PERMISSIONS: { label: string; roles: Record<(typeof PAPEIS)[number], boolean> }[] = [
+  { label: "Ver Dashboard", roles: { Dono: true, Admin: true, Atendente: true } },
+  { label: "Responder Conversas", roles: { Dono: true, Admin: true, Atendente: true } },
+  { label: "Mover cards no CRM", roles: { Dono: true, Admin: true, Atendente: true } },
+  { label: "Editar Agente IA", roles: { Dono: true, Admin: true, Atendente: false } },
+  { label: "Ver Relatórios", roles: { Dono: true, Admin: true, Atendente: false } },
+  { label: "Gerenciar Equipe", roles: { Dono: true, Admin: true, Atendente: false } },
+  { label: "Configurações da Empresa", roles: { Dono: true, Admin: true, Atendente: false } },
+  { label: "Cancelar plano", roles: { Dono: true, Admin: false, Atendente: false } },
+];
 
 function EquipePage() {
   const ctx = Route.useRouteContext();
@@ -130,8 +149,13 @@ function EquipePage() {
             {members.map((m) => (
               <li key={m.id} className="grid grid-cols-12 px-4 py-3 items-center text-sm">
                 <div className="col-span-5 min-w-0">
-                  <div className="font-medium truncate">{m.nome || m.email || m.user_id}</div>
-                  <div className="text-xs text-muted-foreground truncate">{m.email}</div>
+                  <div className="flex items-center gap-3">
+                    <InitialsAvatar name={m.nome || m.email} size={34} />
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{m.nome || m.email || m.user_id}</div>
+                      <div className="text-xs text-muted-foreground truncate">{m.email}</div>
+                    </div>
+                  </div>
                 </div>
                 <div className="col-span-3">
                   {isOwner && m.role !== "owner" ? (
@@ -145,7 +169,7 @@ function EquipePage() {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Badge variant="outline" className="capitalize">{m.role}</Badge>
+                    <Badge variant="outline">{ROLE_LABEL[m.role] ?? m.role}</Badge>
                   )}
                 </div>
                 <div className="col-span-2">
@@ -167,6 +191,35 @@ function EquipePage() {
           </ul>
         )}
       </Card>
+
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="p-5 border-b border-border">
+          <h3 className="font-display text-[15px] font-semibold">Matriz de permissões</h3>
+          <p className="text-xs text-muted-foreground">O que cada papel pode fazer no sistema.</p>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-muted-foreground text-[11px] uppercase tracking-wider">
+            <tr>
+              <th className="text-left px-4 py-3 font-semibold">Permissão</th>
+              {PAPEIS.map((p) => <th key={p} className="text-center px-4 py-3 font-semibold">{p}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {PERMISSIONS.map((row) => (
+              <tr key={row.label} className="border-t border-border">
+                <td className="px-4 py-3 font-medium">{row.label}</td>
+                {PAPEIS.map((p) => (
+                  <td key={p} className="px-4 py-3 text-center">
+                    {row.roles[p]
+                      ? <Check className="size-4 mx-auto text-[var(--brand)]" />
+                      : <X className="size-4 mx-auto text-muted-foreground/50" />}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
