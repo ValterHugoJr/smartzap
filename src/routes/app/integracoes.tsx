@@ -53,8 +53,8 @@ function IntegracoesPage() {
       <Tabs defaultValue="webhooks">
         <TabsList>
           <TabsTrigger value="webhooks"><Webhook className="size-4 mr-1.5" /> Webhooks</TabsTrigger>
-          <TabsTrigger value="api"><KeyRound className="size-4 mr-1.5" /> API pública</TabsTrigger>
-          <TabsTrigger value="utm"><Link2 className="size-4 mr-1.5" /> Links UTM</TabsTrigger>
+          <TabsTrigger value="api"><KeyRound className="size-4 mr-1.5" /> API</TabsTrigger>
+          <TabsTrigger value="utm"><Link2 className="size-4 mr-1.5" /> UTM</TabsTrigger>
         </TabsList>
 
         <TabsContent value="webhooks" className="mt-4"><WebhooksTab /></TabsContent>
@@ -106,13 +106,19 @@ function WebhooksTab() {
         <div className="space-y-2">
           {rows.map((w) => (
             <Card key={w.id} className="p-4 flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
+                            <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-semibold">{w.nome}</h3>
-                  {w.ativo ? <Badge variant="outline" className="text-emerald-600">ativo</Badge> : <Badge variant="outline">inativo</Badge>}
+                  <code className="text-[12.5px] font-mono break-all flex-1 min-w-0">{w.url}</code>
+                  {w.ativo ? (
+                    <Badge className="bg-[rgba(37,211,102,.15)] text-emerald-600 dark:text-[#9af0bd] border-none">Ativo</Badge>
+                  ) : (
+                    <Badge className="bg-muted text-muted-foreground border-none">Pausado</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap mt-1.5">
+                  <span className="text-sm font-semibold">{w.nome}</span>
                   {(w.eventos ?? []).map((e: string) => <Badge key={e} variant="secondary" className="text-xs">{e}</Badge>)}
                 </div>
-                <p className="text-xs text-muted-foreground font-mono mt-1 truncate">{w.url}</p>
                 <p className="text-xs text-muted-foreground mt-1">Secret: <code className="text-[10px]">{w.secret}</code></p>
               </div>
               <div className="flex items-center gap-1">
@@ -179,6 +185,12 @@ function WebhooksTab() {
   );
 }
 
+function maskToken(token: string): string {
+  if (!token) return "";
+  if (token.length <= 15) return `${token.slice(0, 4)}•••••`;
+  return `${token.slice(0, 12)}•••••${token.slice(-3)}`;
+}
+
 function ApiTab({ isBusiness }: { isBusiness: boolean }) {
   const list = useServerFn(listApiTokens);
   const create = useServerFn(createApiToken);
@@ -212,6 +224,13 @@ function ApiTab({ isBusiness }: { isBusiness: boolean }) {
         <p className="text-xs text-muted-foreground mt-2">Autentique com <code>Authorization: Bearer &lt;token&gt;</code>. Recursos: <code>contacts</code> (GET), <code>messages</code> (GET/POST).</p>
       </Card>
 
+      <Card className="p-4">
+        <h3 className="font-semibold mb-2">Endpoints v1</h3>
+        <code className="block font-mono text-[11.5px] text-muted-foreground">GET&nbsp;&nbsp;/api/public/v1/contacts</code>
+        <code className="block font-mono text-[11.5px] text-muted-foreground">GET&nbsp;&nbsp;/api/public/v1/messages?numero=...</code>
+        <code className="block font-mono text-[11.5px] text-muted-foreground">POST /api/public/v1/messages</code>
+      </Card>
+
       <div className="flex gap-2">
         <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nome do token (ex: integração CRM)" />
         <Button onClick={handleCreate}><Plus className="size-4 mr-1" /> Gerar</Button>
@@ -228,7 +247,7 @@ function ApiTab({ isBusiness }: { isBusiness: boolean }) {
                   <strong>{t.label}</strong>
                   {t.revogado && <Badge variant="outline" className="text-red-600">revogado</Badge>}
                 </div>
-                <code className="text-xs text-muted-foreground break-all">{t.token}</code>
+                <code className="text-xs text-muted-foreground break-all">{maskToken(t.token)}</code>
               </div>
               <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(t.token); toast.success("Copiado"); }}>
                 <Copy className="size-4" />
