@@ -28,6 +28,7 @@ function ConfigPage() {
   const [fEvoUrl, setFEvoUrl] = useState("");
   const [fEvoKey, setFEvoKey] = useState("");
   const [fGemini, setFGemini] = useState("");
+  const [fGroq, setFGroq] = useState("");
   const [fGId, setFGId] = useState("");
   const [fGSecret, setFGSecret] = useState("");
   const [savingInteg, setSavingInteg] = useState(false);
@@ -88,11 +89,13 @@ function ConfigPage() {
       put("evolution_api_url", fEvoUrl);
       put("evolution_api_key", fEvoKey);
       put("gemini_api_key", fGemini);
+      put("groq_api_key", fGroq);
       put("google_client_id", fGId);
       put("google_client_secret", fGSecret);
       await setIntegFn({ data });
       setFEvoKey("");
       setFGemini("");
+      setFGroq("");
       setFGSecret("");
       await loadInteg();
       toast.success("Integrações salvas");
@@ -293,6 +296,13 @@ function ConfigPage() {
               </IntegRow>
             </div>
 
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider">Transcrição de áudio (Whisper · Groq)</div>
+              <IntegRow label="Chave Groq (Whisper)" badge={integ.groqKey.source} hint={integ.groqKey.hint} onClear={integ.groqKey.source === "sistema" ? () => void clearInteg("groq_api_key") : undefined}>
+                <Input type="password" value={fGroq} onChange={(e) => setFGroq(e.target.value)} placeholder="Nova chave gsk_... (em branco = manter a atual)" className="font-mono text-[12px]" />
+              </IntegRow>
+              <p className="text-[11px] text-muted-foreground">Transcreve os áudios que os clientes mandam no WhatsApp e a IA responde a partir da transcrição. Sem a chave, o áudio fica registrado na conversa, mas a IA não responde.</p>
+            </div>
             <div className="space-y-3">
               <div className="text-xs font-bold uppercase tracking-wider">Google Agenda (OAuth)</div>
               <IntegRow label="Client ID" badge={integ.googleClientId.source} onClear={integ.googleClientId.source === "sistema" ? () => void clearInteg("google_client_id") : undefined}>
