@@ -60,7 +60,7 @@ export async function getPlatformConfig(): Promise<PlatformConfig> {
       geminiKey: gem.source,
       groqKey: grq.source,
       googleClientId: gid.source,
-      googleClientSecret: gcs.source,
+      googleClientSecret: gsec.source,
     },
   };
   cache = { at: Date.now(), cfg };
