@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { Bot, Loader2, Save, Send, Sparkles, Wand2, ChevronDown, Settings2, RefreshCcw, HelpCircle, ArrowLeft, CheckCircle2, Calendar, Link2 } from "lucide-react";
+import { Bot, Loader2, Save, Send, Sparkles, Wand2, ChevronDown, Settings2, RefreshCcw, HelpCircle, ArrowLeft, CheckCircle2, Calendar, Link2, Clock } from "lucide-react";
 import { brand } from "@/config/brand";
 import { buildSystemPrompt } from "@/lib/ai-prompt";
 import { testAiReply } from "@/lib/evolution.functions";
@@ -30,6 +30,19 @@ export const Route = createFileRoute("/app/agente")({
 });
 
 const PLACEHOLDER = `Ex: Tenho uma padaria artesanal na Vila Mariana, em São Paulo, aberta de seg a sáb das 6h às 20h. Vendo pães de fermentação natural, doces, bolos sob encomenda e cestas de café da manhã. Entrego em até 5km via Loggi. Quero que a IA atenda no WhatsApp: cumprimente, descubra o que o cliente quer, sugira combos, confirme endereço e mande o link de pagamento. Pode oferecer o cupom PADARIA10 quando fizer sentido.`;
+
+const PERSONALIDADE_RESUMO = [
+  { value: "padrao", label: "Padrão", emoji: "🤝", desc: "Equilibrado — simpático e profissional." },
+  { value: "extrovertido", label: "Extrovertido", emoji: "🎉", desc: "Animado, vibrante, transmite energia." },
+  { value: "serio", label: "Sério", emoji: "🎩", desc: "Profissional, objetivo, direto ao ponto." },
+  { value: "divertido", label: "Divertido", emoji: "😄", desc: "Leve, bem-humorado, brincalhão sem perder foco." },
+  { value: "consultivo", label: "Consultivo", emoji: "🧠", desc: "Especialista, recomenda com fundamento." },
+  { value: "amigavel", label: "Amigável", emoji: "🫶", desc: "Acolhedor, próximo, como um amigo prestativo." },
+];
+
+const BUFFER_ROTULOS: Record<number, string> = {
+  3: "Instantâneo", 5: "Rápido", 10: "Humano", 20: "Pensativo", 30: "Calmo",
+};
 
 function AgentePage() {
   const ctx = Route.useRouteContext();
@@ -333,6 +346,9 @@ function AgentePage() {
   }
 
 
+  const presetAtual = PERSONALIDADE_RESUMO.find((p) => p.value === (cfg?.personalidade || "padrao")) ?? PERSONALIDADE_RESUMO[0];
+  const bufferAtual = cfg?.segundos_buffer ?? 8;
+
   // ---------- Tela com config: resumo + ajustes finos + teste ----------
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -370,6 +386,36 @@ function AgentePage() {
             <SummaryRow label="Não pode fazer" value={cfg?.nao_pode_fazer} multiline />
           </Section>
                     
+          <Section title="Personalidade do agente" icon={<Sparkles className="size-3.5" />}>
+            <div className="rounded-xl border border-[var(--brand)] bg-[var(--brand)]/10 p-3">
+              <div className="text-lg">{presetAtual.emoji}</div>
+              <div className="font-semibold text-sm mt-1">{presetAtual.label}</div>
+              <div className="text-[11px] text-muted-foreground leading-snug">{presetAtual.desc}</div>
+            </div>
+            <div className="text-right">
+              <Link to="/app/agente/avancado" className="text-xs text-muted-foreground underline">
+                Editar na edição avançada
+              </Link>
+            </div>
+          </Section>
+
+          <Section title="Tempo de espera (entender contexto)" icon={<Clock className="size-3.5" />}>
+            <p className="text-xs text-muted-foreground">
+              A IA aguarda esse tempo antes de responder. Se o cliente mandar várias mensagens em sequência, ela junta tudo e responde uma vez só — entendendo o contexto completo da conversa.
+            </p>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-3 flex items-center justify-between">
+              <span className="text-sm font-medium">Espera atual</span>
+              <span className="font-display text-lg font-semibold">
+                {bufferAtual}s{BUFFER_ROTULOS[bufferAtual] ? ` · ${BUFFER_ROTULOS[bufferAtual]}` : ""}
+              </span>
+            </div>
+            <div className="text-right">
+              <Link to="/app/agente/avancado" className="text-xs text-muted-foreground underline">
+                Editar na edição avançada
+              </Link>
+            </div>
+          </Section>
+
           <Section title="Agendamento" icon={<Calendar className="size-3.5" />}>
                       <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-4">
                       <div className="flex items-start gap-3">
