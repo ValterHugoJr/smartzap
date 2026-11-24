@@ -13,6 +13,7 @@ export interface PlatformConfig {
   groqKey: string;
   googleClientId: string;
   googleClientSecret: string;
+  voiceApiToken: string;
   sources: {
     evolutionUrl: PlatformSource;
     evolutionKey: PlatformSource;
@@ -20,6 +21,7 @@ export interface PlatformConfig {
     groqKey: PlatformSource;
     googleClientId: PlatformSource;
     googleClientSecret: PlatformSource;
+    voiceApiToken: PlatformSource;
   };
 }
 
@@ -47,6 +49,7 @@ export async function getPlatformConfig(): Promise<PlatformConfig> {
   const grq = pick(row?.groq_api_key, process.env.GROQ_API_KEY);
   const gid = pick(row?.google_client_id, process.env.GOOGLE_CLIENT_ID);
   const gsec = pick(row?.google_client_secret, process.env.GOOGLE_CLIENT_SECRET);
+  const vtok = pick(row?.voice_api_token, process.env.VOICE_API_TOKEN);
   const cfg: PlatformConfig = {
     evolutionUrl: evoUrl.value.replace(/\/+$/, ""),
     evolutionKey: evoKey.value,
@@ -54,6 +57,7 @@ export async function getPlatformConfig(): Promise<PlatformConfig> {
     groqKey: grq.value,
     googleClientId: gid.value,
     googleClientSecret: gsec.value,
+    voiceApiToken: vtok.value,
     sources: {
       evolutionUrl: evoUrl.source,
       evolutionKey: evoKey.source,
@@ -61,6 +65,7 @@ export async function getPlatformConfig(): Promise<PlatformConfig> {
       groqKey: grq.source,
       googleClientId: gid.source,
       googleClientSecret: gsec.source,
+      voiceApiToken: vtok.source,
     },
   };
   cache = { at: Date.now(), cfg };

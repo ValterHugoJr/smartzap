@@ -31,6 +31,7 @@ function ConfigPage() {
   const [fGroq, setFGroq] = useState("");
   const [fGId, setFGId] = useState("");
   const [fGSecret, setFGSecret] = useState("");
+  const [fVoice, setFVoice] = useState("");
   const [savingInteg, setSavingInteg] = useState(false);
 
   const [emails, setEmails] = useState<string[]>([]);
@@ -92,11 +93,13 @@ function ConfigPage() {
       put("groq_api_key", fGroq);
       put("google_client_id", fGId);
       put("google_client_secret", fGSecret);
+      put("voice_api_token", fVoice);
       await setIntegFn({ data });
       setFEvoKey("");
       setFGemini("");
       setFGroq("");
       setFGSecret("");
+      setFVoice("");
       await loadInteg();
       toast.success("Integrações salvas");
     } catch (e: any) { toast.error(e?.message); }
@@ -311,6 +314,14 @@ function ConfigPage() {
               <IntegRow label="Client Secret" badge={integ.googleClientSecret.source} hint={integ.googleClientSecret.hint} onClear={integ.googleClientSecret.source === "sistema" ? () => void clearInteg("google_client_secret") : undefined}>
                 <Input type="password" value={fGSecret} onChange={(e) => setFGSecret(e.target.value)} placeholder="Novo segredo (em branco = manter o atual)" className="font-mono text-[12px]" />
               </IntegRow>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider">Atendimento por voz (LiveKit)</div>
+              <IntegRow label="Token da API de voz" badge={integ.voiceApiToken.source} hint={integ.voiceApiToken.hint} onClear={integ.voiceApiToken.source === "sistema" ? () => void clearInteg("voice_api_token") : undefined}>
+                <Input type="password" value={fVoice} onChange={(e) => setFVoice(e.target.value)} placeholder="Novo token (em branco = manter o atual)" className="font-mono text-[12px]" />
+              </IntegRow>
+              <p className="text-[11px] text-muted-foreground">É o token que o agente de voz hospedado no LiveKit Cloud usa pra se autenticar nas rotas /api/public/voice/*. Precisa ser o MESMO valor configurado nos secrets do agente (DZAP_VOICE_TOKEN). Vazio = endpoints de voz desligados (503).</p>
             </div>
 
             <div className="flex justify-end">

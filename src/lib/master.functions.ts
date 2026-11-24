@@ -619,10 +619,11 @@ export const getPlatformIntegrations = createServerFn({ method: "POST" })
       groqKey: { configured: !!cfg.groqKey, hint: hint(cfg.groqKey), source: cfg.sources.groqKey },
       googleClientId: { value: cfg.googleClientId, source: cfg.sources.googleClientId },
       googleClientSecret: { configured: !!cfg.googleClientSecret, hint: hint(cfg.googleClientSecret), source: cfg.sources.googleClientSecret },
+      voiceApiToken: { configured: !!cfg.voiceApiToken, hint: hint(cfg.voiceApiToken), source: cfg.sources.voiceApiToken },
     };
   });
 
-const INTEGRATION_FIELDS = ["evolution_api_url", "evolution_api_key", "gemini_api_key", "groq_api_key", "google_client_id", "google_client_secret"] as const;
+const INTEGRATION_FIELDS = ["evolution_api_url", "evolution_api_key", "gemini_api_key", "groq_api_key", "google_client_id", "google_client_secret", "voice_api_token"] as const;
 
 export const setPlatformIntegrations = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -633,6 +634,7 @@ export const setPlatformIntegrations = createServerFn({ method: "POST" })
     groq_api_key?: string;
     google_client_id?: string;
     google_client_secret?: string;
+    voice_api_token?: string;
     clear?: string[];
   }) => d)
   .handler(async ({ context, data }) => {
