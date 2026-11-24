@@ -10,7 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Save, CreditCard, Sparkles, AlertTriangle, Download, Shield, Wallet, Lock, Upload, Smartphone, CheckCircle2 } from "lucide-react";
+import { Loader2, Save, CreditCard, Sparkles, AlertTriangle, Download, Shield, Wallet, Lock, Upload, Smartphone, CheckCircle2, PhoneCall } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { getMyVoiceConfig, setMyVoiceConfig } from "@/lib/voice.functions";
 import { brand } from "@/config/brand";
 import { trialDaysLeft } from "@/lib/tenant";
 import { TemplatesTab } from "@/components/config/templates-tab";
@@ -171,7 +174,10 @@ function ConfigPage() {
         </TabsContent>
 
         <TabsContent value="conexao">
-          <ConexaoTab companyId={companyId} telefone={company?.telefone} />
+          <div className="space-y-4">
+            <ConexaoTab companyId={companyId} telefone={company?.telefone} />
+            <VozTab />
+          </div>
         </TabsContent>
 
 
@@ -297,6 +303,80 @@ function ConexaoTab({ companyId, telefone }: { companyId?: string; telefone?: st
         </div>
       )}
       <p className="text-xs text-muted-foreground">Para conectar, trocar de número ou desconectar, use a tela de Conexão.</p>
+    </Card>
+  );
+}
+
+function VozTab() {
+  const fetchCfg = useServerFn(getMyVoiceConfig);
+  const saveCfg = useServerFn(setMyVoiceConfig);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [greeting, setGreeting] = useState("");
+  const [defaultGreeting, setDefaultGreeting] = useState("");
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const cfg = await fetchCfg();
+        setEnabled(cfg.enabled);
+        setPhone(cfg.phone_number);
+        setGreeting(cfg.greeting);
+        setDefaultGreeting(cfg.default_greeting);
+      } catch (e: any) { toast.error(e?.message ?? "Erro ao carregar a configuração de voz"); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const r = await saveCfg({ data: { enabled, phone_number: phone, greeting } });
+      setPhone(r.phone_number);
+      toast.success("Atendimento por voz salvo");
+    } catch (e: any) { toast.error(e?.message ?? "Erro ao salvar"); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Card className="p-5 space-y-4 max-w-xl">
+      <h2 className="font-semibold flex items-center gap-2"><PhoneCall className="size-4" /> Atendimento por voz (telefone)</h2>
+      {loading ? (
+        <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Carregando…</div>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            A mesma IA que atende no WhatsApp passa a atender também por <b>ligação telefônica</b>, com voz em tempo real,
+            podendo consultar horários e agendar. O número de telefone é <b>atribuído pela equipe V2</b> (os números ficam
+            na conta da plataforma) — depois de receber o seu número, cadastre ele aqui e ative.
+          </p>
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--hairline)] bg-[color:var(--panel-2)] p-4">
+            <span>
+              <span className="block font-semibold text-sm">{enabled ? "Ativado" : "Desativado"}</span>
+              <span className="block text-[11px] text-muted-foreground">Quando ativado, quem ligar pro número abaixo fala com a IA.</span>
+            </span>
+            <Switch checked={enabled} onCheckedChange={setEnabled} />
+          </label>
+          <div>
+            <Label>Número de telefone (atribuído pela V2)</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ex.: 55 33 3551-1254" inputMode="tel" />
+            <p className="text-[11px] text-muted-foreground mt-1">Só dígitos com DDI funcionam — salvamos normalizado (DDD + número ganham o 55 automaticamente).</p>
+          </div>
+          <div>
+            <Label>Saudação inicial (opcional)</Label>
+            <Textarea value={greeting} onChange={(e) => setGreeting(e.target.value)} rows={2} maxLength={500}
+              placeholder={defaultGreeting || "Ex.: Olá! Aqui é a assistente virtual. Como posso ajudar?"} />
+            <p className="text-[11px] text-muted-foreground mt-1">É a primeira frase que a IA fala ao atender. Em branco = usa a apresentação do seu agente.</p>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Save className="size-4 mr-1.5" />} Salvar
+            </Button>
+          </div>
+        </>
+      )}
     </Card>
   );
 }
