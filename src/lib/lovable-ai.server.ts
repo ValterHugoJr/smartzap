@@ -21,6 +21,27 @@ export function normalizeAiProvider(value: unknown): AiProviderConfig["provider"
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
+// Nenhuma chamada de IA pode ficar pendurada sem limite: sem timeout, uma
+// resposta travada do provedor segura a server function por minutos até a
+// plataforma derrubar a requisição — e o erro de verdade nunca chega na UI
+// (foi o que fazia "Analisar e treinar IA" girar 2–3 min e voltar mudo).
+const AI_FETCH_TIMEOUT_MS = 45_000;
+
+async function fetchAi(url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), AI_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (e: any) {
+    if (e?.name === "AbortError") {
+      throw new Error("A IA demorou demais para responder (timeout). Tente novamente.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function aiChat(cfg: AiProviderConfig, messages: ChatMsg[]): Promise<string> {
   const provider = cfg.provider || "gemini";
   if (provider === "openai") {
@@ -46,7 +67,7 @@ export async function aiChat(cfg: AiProviderConfig, messages: ChatMsg[]): Promis
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("LOVABLE_API_KEY ausente.");
   const model = cfg.model || "google/gemini-2.5-flash";
-  const res = await fetch(GATEWAY, {
+  const res = await fetchAi(GATEWAY, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model, messages }),
@@ -62,7 +83,7 @@ export async function aiChat(cfg: AiProviderConfig, messages: ChatMsg[]): Promis
 }
 
 async function openAiChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetchAi("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model, messages }),
@@ -80,7 +101,7 @@ async function anthropicChat(key: string, model: string, messages: ChatMsg[]): P
   const conv = messages
     .filter((m) => m.role !== "system")
     .map((m) => ({ role: m.role, content: m.content }));
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchAi("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,
@@ -107,7 +128,7 @@ async function googleDirectChatOnce(key: string, model: string, messages: ChatMs
   // O gemini-2.5-flash foi encerrado pra contas novas (404 do Google);
   // qualquer variação 2.5 cai pro modelo atual sugerido pelo Google.
   if (directModel.startsWith("gemini-2.5")) directModel = "gemini-3.8-flash";
-  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+  const res = await fetchAi("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: directModel, messages }),

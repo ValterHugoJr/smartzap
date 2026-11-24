@@ -32,6 +32,46 @@ const FIELDS: (keyof GeneratedAgentConfig)[] = [
   "formas_pagamento","faq","politicas","posvenda_msg","pode_fazer","nao_pode_fazer",
 ];
 
+// A análise/geração do assistente usa a MESMA config de IA do atendimento
+// (provedor, modelo e chave da empresa salvos no agent_config) — igual ao
+// testAiReply e ao webhook. Antes era um caminho cru e fixo (Gemini da
+// plataforma, sem chave da empresa): pra empresa Pro/Business com chave
+// própria, era um caminho diferente do que de fato atende no WhatsApp.
+// Sem config salva (empresa nova, primeiro acesso), cai no padrão da
+// plataforma (Gemini), como era.
+async function resolveWizardAiConfig(context: any) {
+  const fallback = { provider: "gemini" as const, model: "google/gemini-2.5-flash" };
+  try {
+    const { supabase, userId } = context ?? {};
+    if (!supabase || !userId) return fallback;
+    const { data: cu } = await supabase
+      .from("company_user")
+      .select("company_id")
+      .eq("user_id", userId)
+      .eq("ativo", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!cu?.company_id) return fallback;
+    const { data: cfg } = await supabase
+      .from("agent_config")
+      .select("ai_provider, ai_model, gemini_api_key, openai_api_key, anthropic_api_key")
+      .eq("company_id", cu.company_id)
+      .maybeSingle();
+    if (!cfg) return fallback;
+    const { normalizeAiProvider } = await import("./lovable-ai.server");
+    return {
+      provider: normalizeAiProvider((cfg as any).ai_provider),
+      model: ((cfg as any).ai_model as string) || "google/gemini-2.5-flash",
+      geminiKey: (cfg as any).gemini_api_key || "",
+      openaiKey: (cfg as any).openai_api_key || "",
+      anthropicKey: (cfg as any).anthropic_api_key || "",
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function extractJson(raw: string): any {
   const trimmed = (raw || "").trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
   try { return JSON.parse(trimmed); } catch {}
@@ -71,8 +111,9 @@ export const analyzeBusinessBrief = createServerFn({ method: "POST" })
       respostas: d?.respostas && typeof d.respostas === "object" ? d.respostas : {},
     };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { lovableAiChat } = await import("./lovable-ai.server");
+    const aiConfig = await resolveWizardAiConfig(context);
 
     const respostasTxt = Object.entries(data.respostas)
       .filter(([, v]) => v && String(v).trim())
@@ -130,7 +171,7 @@ Analise e devolva o JSON.`;
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-      { provider: "gemini", model: "google/gemini-2.5-flash" },
+      aiConfig,
     );
 
     const parsed = extractJson(raw);
@@ -170,9 +211,10 @@ export const generateAgentConfig = createServerFn({ method: "POST" })
       respostas: d?.respostas && typeof d.respostas === "object" ? d.respostas : {},
     };
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { lovableAiChat } = await import("./lovable-ai.server");
     const { buildSystemPrompt } = await import("./ai-prompt");
+    const aiConfig = await resolveWizardAiConfig(context);
 
     const respostasTxt = Object.entries(data.respostas)
       .filter(([, v]) => v && String(v).trim())
@@ -220,7 +262,7 @@ Gere o JSON do agente.`;
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-      { provider: "gemini", model: "google/gemini-2.5-flash" },
+      aiConfig,
     );
 
     const parsed = extractJson(raw) as Partial<GeneratedAgentConfig>;
