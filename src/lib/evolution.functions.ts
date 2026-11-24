@@ -213,6 +213,32 @@ export const disconnectWhatsapp = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const deleteWhatsappInstance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const companyId = await resolveCompanyId(supabase, userId);
+    const { evoDelete } = await import("./evolution.server");
+    const { data: row } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name,api_key")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (row) {
+      try {
+        await evoDelete(row.instance_name, (row as any)?.api_key || undefined);
+      } catch (e: any) {
+        // Instância já removida no servidor = objetivo atingido; segue pra limpeza local.
+        const msg = String(e?.message || "");
+        if (!/not found|404|does not exist/i.test(msg)) console.warn("[evolution.delete]", e);
+      }
+      // Remove o registro local: connectWhatsapp recria tudo do zero
+      // (linha nova via upsert, instância nova no servidor, webhook e QR novos).
+      await supabase.from("whatsapp_instances").delete().eq("company_id", companyId);
+    }
+    return { ok: true };
+  });
+
 export const sendWhatsappText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { numero: string; texto: string; contatoNome?: string | null }) => d)

@@ -6,9 +6,20 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, Power, QrCode, Smartphone } from "lucide-react";
+import { Loader2, RefreshCw, Power, QrCode, Smartphone, Trash2 } from "lucide-react";
 import { brand } from "@/config/brand";
-import { connectWhatsapp, checkWhatsappStatus, disconnectWhatsapp } from "@/lib/evolution.functions";
+import { connectWhatsapp, checkWhatsappStatus, disconnectWhatsapp, deleteWhatsappInstance } from "@/lib/evolution.functions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { usePlanFeatures } from "@/hooks/use-plan-features";
 import { PlanUsageBadge } from "@/components/plan-usage-badge";
 
@@ -21,9 +32,11 @@ function ConexaoPage() {
   const connect = useServerFn(connectWhatsapp);
   const check = useServerFn(checkWhatsappStatus);
   const disconnect = useServerFn(disconnectWhatsapp);
+  const deleteInstance = useServerFn(deleteWhatsappInstance);
   const plan = usePlanFeatures();
 
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("disconnected");
   const [numero, setNumero] = useState<string | null>(null);
@@ -79,6 +92,16 @@ function ConexaoPage() {
     finally { setLoading(false); }
   }
 
+  async function doDeleteInstance() {
+    setDeleting(true);
+    try {
+      await deleteInstance();
+      setStatus("disconnected"); setNumero(null); setQr(null); stopPolling();
+      toast.success("Instância excluída. Clique em Conectar WhatsApp para gerar um novo QR Code.");
+    } catch (e: any) { toast.error(e?.message || "Falha ao excluir a instância"); }
+    finally { setDeleting(false); }
+  }
+
   const statusBadge =
     status === "connected" ? <Badge className="bg-primary">Conectado</Badge>
     : status === "connecting" ? <Badge variant="secondary" className="bg-amber-500/15 text-amber-700">Conectando…</Badge>
@@ -106,20 +129,52 @@ function ConexaoPage() {
               {numero && <span className="text-sm text-muted-foreground">· {numero}</span>}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => doCheck()} disabled={loading}>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => doCheck()} disabled={loading || deleting}>
               <RefreshCw className="size-4 mr-1.5" /> Atualizar
             </Button>
             {status === "connected" ? (
-              <Button variant="destructive" size="sm" onClick={doDisconnect} disabled={loading}>
+              <Button variant="destructive" size="sm" onClick={doDisconnect} disabled={loading || deleting}>
                 <Power className="size-4 mr-1.5" /> Desconectar
               </Button>
             ) : (
-              <Button size="sm" onClick={doConnect} disabled={loading}>
-                {loading ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <QrCode className="size-4 mr-1.5" />}
-                {qr ? "Gerar novo QR" : "Conectar WhatsApp"}
-              </Button>
+              <>
+                <Button size="sm" onClick={doConnect} disabled={loading || deleting}>
+                  {loading ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <QrCode className="size-4 mr-1.5" />}
+                  {qr ? "Gerar novo QR" : "Conectar WhatsApp"}
+                </Button>
+                {status === "connecting" && (
+                  <Button variant="outline" size="sm" onClick={doDisconnect} disabled={loading || deleting}>
+                    <Power className="size-4 mr-1.5" /> Desconectar
+                  </Button>
+                )}
+              </>
             )}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={loading || deleting}>
+                  {deleting ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Trash2 className="size-4 mr-1.5" />}
+                  Excluir instância
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir a instância do WhatsApp?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    A instância será removida do servidor e deste painel. Use isto se a conexão
+                    travou (por exemplo, o WhatsApp fica pedindo para tentar de novo mais tarde).
+                    Depois da exclusão, será preciso <b>escanear o QR Code novamente</b> para
+                    reconectar. As conversas já recebidas continuam salvas no DZap.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={doDeleteInstance} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Sim, excluir instância
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
 
