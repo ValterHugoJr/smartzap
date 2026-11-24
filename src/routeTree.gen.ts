@@ -62,6 +62,9 @@ import { Route as AppAgenteAvancadoRouteImport } from './routes/app/agente.avanc
 import { Route as ApiPublicBillingWebhookRouteImport } from './routes/api/public/billing/webhook'
 import { Route as ApiPublicHooksProcessCampaignsRouteImport } from './routes/api/public/hooks/process-campaigns'
 import { Route as ApiPublicV1SplatRouteImport } from './routes/api/public/v1/$'
+import { Route as ApiPublicVoiceAvailabilityRouteImport } from './routes/api/public/voice/availability'
+import { Route as ApiPublicVoiceBookRouteImport } from './routes/api/public/voice/book'
+import { Route as ApiPublicVoiceConfigRouteImport } from './routes/api/public/voice/config'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -330,6 +333,22 @@ const ApiPublicV1SplatRoute = ApiPublicV1SplatRouteImport.update({
   path: '/api/public/v1/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicVoiceAvailabilityRoute =
+  ApiPublicVoiceAvailabilityRouteImport.update({
+    id: '/api/public/voice/availability',
+    path: '/api/public/voice/availability',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicVoiceBookRoute = ApiPublicVoiceBookRouteImport.update({
+  id: '/api/public/voice/book',
+  path: '/api/public/voice/book',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicVoiceConfigRoute = ApiPublicVoiceConfigRouteImport.update({
+  id: '/api/public/voice/config',
+  path: '/api/public/voice/config',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -385,6 +404,9 @@ export interface FileRoutesByFullPath {
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
   '/api/public/v1/$': typeof ApiPublicV1SplatRoute
+  '/api/public/voice/availability': typeof ApiPublicVoiceAvailabilityRoute
+  '/api/public/voice/book': typeof ApiPublicVoiceBookRoute
+  '/api/public/voice/config': typeof ApiPublicVoiceConfigRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -438,6 +460,9 @@ export interface FileRoutesByTo {
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
   '/api/public/v1/$': typeof ApiPublicV1SplatRoute
+  '/api/public/voice/availability': typeof ApiPublicVoiceAvailabilityRoute
+  '/api/public/voice/book': typeof ApiPublicVoiceBookRoute
+  '/api/public/voice/config': typeof ApiPublicVoiceConfigRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -494,6 +519,9 @@ export interface FileRoutesById {
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
   '/api/public/v1/$': typeof ApiPublicV1SplatRoute
+  '/api/public/voice/availability': typeof ApiPublicVoiceAvailabilityRoute
+  '/api/public/voice/book': typeof ApiPublicVoiceBookRoute
+  '/api/public/voice/config': typeof ApiPublicVoiceConfigRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -551,6 +579,9 @@ export interface FileRouteTypes {
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
     | '/api/public/v1/$'
+    | '/api/public/voice/availability'
+    | '/api/public/voice/book'
+    | '/api/public/voice/config'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -604,6 +635,9 @@ export interface FileRouteTypes {
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
     | '/api/public/v1/$'
+    | '/api/public/voice/availability'
+    | '/api/public/voice/book'
+    | '/api/public/voice/config'
   id:
     | '__root__'
     | '/'
@@ -659,6 +693,9 @@ export interface FileRouteTypes {
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
     | '/api/public/v1/$'
+    | '/api/public/voice/availability'
+    | '/api/public/voice/book'
+    | '/api/public/voice/config'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -679,6 +716,9 @@ export interface RootRouteChildren {
   ApiPublicBillingWebhookRoute: typeof ApiPublicBillingWebhookRoute
   ApiPublicHooksProcessCampaignsRoute: typeof ApiPublicHooksProcessCampaignsRoute
   ApiPublicV1SplatRoute: typeof ApiPublicV1SplatRoute
+  ApiPublicVoiceAvailabilityRoute: typeof ApiPublicVoiceAvailabilityRoute
+  ApiPublicVoiceBookRoute: typeof ApiPublicVoiceBookRoute
+  ApiPublicVoiceConfigRoute: typeof ApiPublicVoiceConfigRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1054,6 +1094,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicV1SplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/voice/availability': {
+      id: '/api/public/voice/availability'
+      path: '/api/public/voice/availability'
+      fullPath: '/api/public/voice/availability'
+      preLoaderRoute: typeof ApiPublicVoiceAvailabilityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/voice/book': {
+      id: '/api/public/voice/book'
+      path: '/api/public/voice/book'
+      fullPath: '/api/public/voice/book'
+      preLoaderRoute: typeof ApiPublicVoiceBookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/voice/config': {
+      id: '/api/public/voice/config'
+      path: '/api/public/voice/config'
+      fullPath: '/api/public/voice/config'
+      preLoaderRoute: typeof ApiPublicVoiceConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1182,6 +1243,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicBillingWebhookRoute: ApiPublicBillingWebhookRoute,
   ApiPublicHooksProcessCampaignsRoute: ApiPublicHooksProcessCampaignsRoute,
   ApiPublicV1SplatRoute: ApiPublicV1SplatRoute,
+  ApiPublicVoiceAvailabilityRoute: ApiPublicVoiceAvailabilityRoute,
+  ApiPublicVoiceBookRoute: ApiPublicVoiceBookRoute,
+  ApiPublicVoiceConfigRoute: ApiPublicVoiceConfigRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
