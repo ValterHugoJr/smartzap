@@ -58,6 +58,7 @@ import { Route as MasterPainelRouteImport } from './routes/master/painel'
 import { Route as MasterPlanosRouteImport } from './routes/master/planos'
 import { Route as ApiPublicGoogleCallbackRouteImport } from './routes/api/public/google-callback'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp-webhook'
+import { Route as AppAgenteIndexRouteImport } from './routes/app/agente.index'
 import { Route as AppAgenteAvancadoRouteImport } from './routes/app/agente.avancado'
 import { Route as ApiPublicBillingWebhookRouteImport } from './routes/api/public/billing/webhook'
 import { Route as ApiPublicHooksProcessCampaignsRouteImport } from './routes/api/public/hooks/process-campaigns'
@@ -312,6 +313,11 @@ const ApiPublicWhatsappWebhookRoute =
     path: '/api/public/whatsapp-webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AppAgenteIndexRoute = AppAgenteIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAgenteRoute,
+} as any)
 const AppAgenteAvancadoRoute = AppAgenteAvancadoRouteImport.update({
   id: '/avancado',
   path: '/avancado',
@@ -401,6 +407,7 @@ export interface FileRoutesByFullPath {
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/app/agente/avancado': typeof AppAgenteAvancadoRoute
+  '/app/agente/': typeof AppAgenteIndexRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
   '/api/public/v1/$': typeof ApiPublicV1SplatRoute
@@ -418,7 +425,6 @@ export interface FileRoutesByTo {
   '/reset-senha': typeof ResetSenhaRoute
   '/termos': typeof TermosRoute
   '/trocar-senha': typeof TrocarSenhaRoute
-  '/app/agente': typeof AppAgenteRouteWithChildren
   '/app/campanhas': typeof AppCampanhasRoute
   '/app/checkout': typeof AppCheckoutRoute
   '/app/conexao': typeof AppConexaoRoute
@@ -457,6 +463,7 @@ export interface FileRoutesByTo {
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/app/agente/avancado': typeof AppAgenteAvancadoRoute
+  '/app/agente': typeof AppAgenteIndexRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
   '/api/public/v1/$': typeof ApiPublicV1SplatRoute
@@ -516,6 +523,7 @@ export interface FileRoutesById {
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/app/agente/avancado': typeof AppAgenteAvancadoRoute
+  '/app/agente/': typeof AppAgenteIndexRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
   '/api/public/v1/$': typeof ApiPublicV1SplatRoute
@@ -576,6 +584,7 @@ export interface FileRouteTypes {
     | '/api/public/google-callback'
     | '/api/public/whatsapp-webhook'
     | '/app/agente/avancado'
+    | '/app/agente/'
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
     | '/api/public/v1/$'
@@ -593,7 +602,6 @@ export interface FileRouteTypes {
     | '/reset-senha'
     | '/termos'
     | '/trocar-senha'
-    | '/app/agente'
     | '/app/campanhas'
     | '/app/checkout'
     | '/app/conexao'
@@ -632,6 +640,7 @@ export interface FileRouteTypes {
     | '/api/public/google-callback'
     | '/api/public/whatsapp-webhook'
     | '/app/agente/avancado'
+    | '/app/agente'
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
     | '/api/public/v1/$'
@@ -690,6 +699,7 @@ export interface FileRouteTypes {
     | '/api/public/google-callback'
     | '/api/public/whatsapp-webhook'
     | '/app/agente/avancado'
+    | '/app/agente/'
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
     | '/api/public/v1/$'
@@ -1066,6 +1076,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWhatsappWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/agente/': {
+      id: '/app/agente/'
+      path: '/'
+      fullPath: '/app/agente/'
+      preLoaderRoute: typeof AppAgenteIndexRouteImport
+      parentRoute: typeof AppAgenteRoute
+    }
     '/app/agente/avancado': {
       id: '/app/agente/avancado'
       path: '/avancado'
@@ -1120,10 +1137,12 @@ declare module '@tanstack/react-router' {
 
 interface AppAgenteRouteChildren {
   AppAgenteAvancadoRoute: typeof AppAgenteAvancadoRoute
+  AppAgenteIndexRoute: typeof AppAgenteIndexRoute
 }
 
 const AppAgenteRouteChildren: AppAgenteRouteChildren = {
   AppAgenteAvancadoRoute: AppAgenteAvancadoRoute,
+  AppAgenteIndexRoute: AppAgenteIndexRoute,
 }
 
 const AppAgenteRouteWithChildren = AppAgenteRoute._addFileChildren(

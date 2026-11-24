@@ -1,0 +1,594 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { HelpTip } from "@/components/help-tip";
+import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { toast } from "sonner";
+import { Bot, Loader2, Save, Send, Sparkles, Wand2, ChevronDown, Settings2, RefreshCcw, HelpCircle, ArrowLeft, CheckCircle2, Calendar, Link2, Clock } from "lucide-react";
+import { brand } from "@/config/brand";
+import { buildSystemPrompt } from "@/lib/ai-prompt";
+import { testAiReply } from "@/lib/evolution.functions";
+import { generateAgentConfig, analyzeBusinessBrief, type BriefQuestion } from "@/lib/agent-ai.functions";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { usePlanFeatures } from "@/hooks/use-plan-features";
+import { startGoogleOAuth, disconnectGoogle } from "@/lib/google.functions";
+
+export const Route = createFileRoute("/app/agente/")({
+  head: () => ({ meta: [{ title: `${brand.name} — Agente IA` }] }),
+  component: AgentePage,
+});
+
+// Erro de IA precisa aparecer de verdade: mensagem do servidor (ou causa
+// legível) e tempo suficiente na tela pra ler — nada de falha silenciosa.
+function toastAiError(e: any, fallback: string) {
+  const msg = (e?.message || "").trim();
+  toast.error(msg || fallback, { duration: 12000 });
+}
+
+const PLACEHOLDER = `Ex: Tenho uma padaria artesanal na Vila Mariana, em São Paulo, aberta de seg a sáb das 6h às 20h. Vendo pães de fermentação natural, doces, bolos sob encomenda e cestas de café da manhã. Entrego em até 5km via Loggi. Quero que a IA atenda no WhatsApp: cumprimente, descubra o que o cliente quer, sugira combos, confirme endereço e mande o link de pagamento. Pode oferecer o cupom PADARIA10 quando fizer sentido.`;
+
+const PERSONALIDADE_RESUMO = [
+  { value: "padrao", label: "Padrão", emoji: "🤝", desc: "Equilibrado — simpático e profissional." },
+  { value: "extrovertido", label: "Extrovertido", emoji: "🎉", desc: "Animado, vibrante, transmite energia." },
+  { value: "serio", label: "Sério", emoji: "🎩", desc: "Profissional, objetivo, direto ao ponto." },
+  { value: "divertido", label: "Divertido", emoji: "😄", desc: "Leve, bem-humorado, brincalhão sem perder foco." },
+  { value: "consultivo", label: "Consultivo", emoji: "🧠", desc: "Especialista, recomenda com fundamento." },
+  { value: "amigavel", label: "Amigável", emoji: "🫶", desc: "Acolhedor, próximo, como um amigo prestativo." },
+];
+
+const BUFFER_ROTULOS: Record<number, string> = {
+  3: "Instantâneo", 5: "Rápido", 10: "Humano", 20: "Pensativo", 30: "Calmo",
+};
+
+function AgentePage() {
+  const ctx = Route.useRouteContext();
+  const companyId = ctx.company?.id;
+  const generate = useServerFn(generateAgentConfig);
+  const analyze = useServerFn(analyzeBusinessBrief);
+  const test = useServerFn(testAiReply);
+
+  const [loading, setLoading] = useState(true);
+  const [hasConfig, setHasConfig] = useState(false);
+  const [cfg, setCfg] = useState<any>(null);
+  const [descricao, setDescricao] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [promptPreview, setPromptPreview] = useState("");
+
+  // PRD interview flow
+  type Step = "descrever" | "entrevista" | "pronto";
+  const [step, setStep] = useState<Step>("descrever");
+  const [perguntas, setPerguntas] = useState<BriefQuestion[]>([]);
+  const [respostas, setRespostas] = useState<Record<string, string>>({});
+  const [resumoIA, setResumoIA] = useState("");
+  const [cobertura, setCobertura] = useState(0);
+
+  // Ajustes finos
+  const [tamanhoResposta, setTamanhoResposta] = useState<"curtas" | "medias" | "longas">("curtas");
+  const [telefone, setTelefone] = useState("");
+  const [palavraPausar, setPalavraPausar] = useState("/pausar");
+  const [palavraDespausar, setPalavraDespausar] = useState("/despausar");
+  const [responderEmPartes, setResponderEmPartes] = useState(true);
+
+  // Agendamento / Google Agenda
+  const plan = usePlanFeatures();
+  const allowGoogleCal = plan.features.googleCalendar;
+  const gStart = useServerFn(startGoogleOAuth);
+  const gDisc = useServerFn(disconnectGoogle);
+  const [google, setGoogle] = useState<any>(null);
+  const [agendamentoAtivo, setAgendamentoAtivo] = useState(false);
+  const [servicosAgendaveis, setServicosAgendaveis] = useState("");
+  const [duracaoPadrao, setDuracaoPadrao] = useState("30 min");
+  const [antecedenciaMin, setAntecedenciaMin] = useState("");
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState("");
+
+  const [testMsg, setTestMsg] = useState("Oi, vocês entregam aqui?");
+  const [testReply, setTestReply] = useState<string[]>([]);
+  const [testing, setTesting] = useState(false);
+
+  async function reload() {
+    if (!companyId) return;
+    const { data } = await supabase.from("agent_config").select("*").eq("company_id", companyId).maybeSingle();
+    const { data: g } = await supabase.from("google_integration").select("company_id,email,conectado,calendar_id,expiry,updated_at").eq("company_id", companyId).maybeSingle();
+    setGoogle(g);
+    if (data) {
+      setAgendamentoAtivo(!!data.agendamento_ativo);
+      setServicosAgendaveis(data.servicos_agendaveis || "");
+      setDuracaoPadrao(data.duracao_padrao || "30 min");
+      setAntecedenciaMin(data.antecedencia_min || "");
+      setHorariosDisponiveis(data.horarios_disponiveis || "");
+    }
+    // Empresa que já tem agente configurado (nome definido) NÃO cai no
+    // assistente inicial — mesmo que campos livres como sobre_empresa
+    // estejam vazios (config montada pela edição avançada/API).
+    if (data && data.nome_agente && data.nome_agente.trim()) {
+      setHasConfig(true);
+      setCfg(data);
+      setTamanhoResposta((data.tamanho_resposta as any) || "curtas");
+      setTelefone(data.telefone_transferencia || "");
+      setPalavraPausar(data.palavra_pausar || "/pausar");
+      setPalavraDespausar(data.palavra_despausar || "/despausar");
+      setResponderEmPartes(data.responder_em_partes ?? true);
+      setPromptPreview(buildSystemPrompt(data as any, { responderEmPartes: data.responder_em_partes ?? true, produtos: [] }));
+    } else if (data) {
+      setCfg(data);
+    }
+    setLoading(false);
+  }
+  useEffect(() => { void reload(); }, [companyId]);
+
+  async function runAnalyze() {
+    if (descricao.trim().length < 20) {
+      return toast.error("Conte um pouco mais sobre o negócio (mínimo ~20 caracteres).");
+    }
+    setAnalyzing(true);
+    try {
+      const a: any = await analyze({ data: { descricao, respostas: {} } });
+      setResumoIA(a.resumo || "");
+      setCobertura(a.cobertura || 0);
+      setPerguntas(a.perguntas || []);
+      if (a.pronto || !a.perguntas?.length) {
+        // já dá pra gerar direto
+        await runGenerate({});
+      } else {
+        setStep("entrevista");
+      }
+    } catch (e: any) {
+      toastAiError(e, "Falha ao analisar o negócio. Tente novamente.");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function runGenerate(extraRespostas: Record<string, string>) {
+    setGenerating(true);
+    try {
+      const merged = { ...respostas, ...extraRespostas };
+      const r: any = await generate({ data: { descricao, respostas: merged } });
+      setCfg((prev: any) => ({ ...(prev || {}), ...r.config }));
+      setPromptPreview(r.promptPreview);
+      setHasConfig(true);
+      setStep("pronto");
+      toast.success("Pronto! Sua IA foi montada com base no seu negócio.");
+    } catch (e: any) {
+      toastAiError(e, "Falha ao gerar a configuração da IA. Tente novamente.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function submitEntrevista() {
+    // valida obrigatórias
+    const faltando = perguntas.filter((q) => q.obrigatoria && !(respostas[q.id] || "").trim());
+    if (faltando.length) {
+      return toast.error(`Faltou responder: ${faltando[0].pergunta}`);
+    }
+    await runGenerate(respostas);
+  }
+
+
+  async function save() {
+    if (!companyId || !cfg) return;
+    setSaving(true);
+    const payload = {
+      ...cfg,
+      tamanho_resposta: tamanhoResposta,
+      telefone_transferencia: telefone,
+      palavra_pausar: palavraPausar,
+      palavra_despausar: palavraDespausar,
+      responder_em_partes: responderEmPartes,
+      agendamento_ativo: agendamentoAtivo,
+      servicos_agendaveis: servicosAgendaveis,
+      duracao_padrao: duracaoPadrao,
+      antecedencia_min: antecedenciaMin,
+      horarios_disponiveis: horariosDisponiveis,
+    };
+    const { user_id: _u, company_id: _c, updated_at: _ua, ...rest } = payload;
+    const { error } = await supabase.from("agent_config").upsert(
+      { company_id: companyId, user_id: ctx.user.id, ...rest },
+      { onConflict: "company_id" },
+    );
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Configuração salva");
+    setPromptPreview(buildSystemPrompt(payload as any, { responderEmPartes, produtos: [] }));
+  }
+
+  async function runTest() {
+    setTesting(true); setTestReply([]);
+    try {
+      const r = await test({ data: { message: testMsg } });
+      setTestReply(r.parts);
+    } catch (e: any) { toast.error(e?.message || "Falha"); }
+    finally { setTesting(false); }
+  }
+  
+  async function connectGoogle() {
+    try {
+      const r: any = await gStart({});
+      if (!r.ok) return toast.error(r.error);
+      window.location.href = r.url;
+    } catch (e: any) { toast.error(e?.message || "Falha"); }
+  }
+
+  async function disconnectG() {
+    
+    await gDisc({}); toast.success("Google desconectado"); reload();
+  }
+
+  if (loading) return <div className="grid place-items-center h-40 text-muted-foreground"><Loader2 className="animate-spin" /></div>;
+
+  // ---------- Tela inicial: descrição livre → análise PRD ----------
+  if (!hasConfig) {
+    if (step === "entrevista") {
+      return (
+        <div className="space-y-6 max-w-2xl mx-auto">
+          <header className="space-y-2 pt-2">
+            <button
+              onClick={() => setStep("descrever")}
+              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+            >
+              <ArrowLeft className="size-3" /> Voltar e reescrever
+            </button>
+            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--brand-text)]">
+              <HelpCircle className="size-3.5" /> Faltam alguns detalhes
+            </div>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold">
+              Pra IA não responder torto, me ajuda com isso
+            </h1>
+            {resumoIA && (
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Entendi até aqui:</span> {resumoIA}
+              </p>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <div className="h-1.5 flex-1 rounded-full bg-[var(--panel-2)] overflow-hidden">
+                <div
+                  className="h-full bg-[var(--brand)] transition-all"
+                  style={{ width: `${Math.max(15, cobertura)}%` }}
+                />
+              </div>
+              <span className="text-[11px] text-muted-foreground tabular-nums">{cobertura}%</span>
+            </div>
+          </header>
+
+          <div className="space-y-3">
+            {perguntas.map((q) => (
+              <div
+                key={q.id}
+                className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <Label className="text-sm font-medium leading-snug">
+                    {q.pergunta}
+                    {q.obrigatoria && <span className="text-[var(--brand-text)] ml-1">*</span>}
+                  </Label>
+                </div>
+                {q.porque && (
+                  <p className="text-[11.5px] text-muted-foreground">
+                    <span className="font-medium">Por que importa:</span> {q.porque}
+                  </p>
+                )}
+                <Textarea
+                  value={respostas[q.id] || ""}
+                  onChange={(e) => setRespostas((r) => ({ ...r, [q.id]: e.target.value }))}
+                  placeholder={q.exemplo ? `Ex: ${q.exemplo}` : ""}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap pt-2">
+            <button
+              onClick={() => runGenerate(respostas)}
+              disabled={generating}
+              className="text-xs text-muted-foreground underline disabled:opacity-50"
+            >
+              Pular e gerar com o que tenho
+            </button>
+            <Button onClick={submitEntrevista} disabled={generating} size="lg">
+              {generating ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Wand2 className="size-4 mr-2" />}
+              Gerar atendimento da IA
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6 max-w-3xl mx-auto">
+        <header className="space-y-2 text-center pt-4">
+          <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--brand-text)]">
+            <Sparkles className="size-3.5" /> Agente IA
+          </div>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold">Conte sobre o seu negócio</h1>
+          <p className="text-sm text-muted-foreground">
+            Escreva do seu jeito. A IA vai ler, ver o que falta e te perguntar antes de montar — pra não responder torto depois.
+          </p>
+        </header>
+
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 space-y-4">
+          <Label className="text-sm font-medium">
+            Descreva seu negócio, como você atende e o que a IA deve fazer
+          </Label>
+          <Textarea
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            placeholder={PLACEHOLDER}
+            rows={10}
+            className="text-sm leading-relaxed"
+          />
+          <div className="grid sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground">
+            <Hint icon={<CheckCircle2 className="size-3" />} text="O que vende e preço" />
+            <Hint icon={<CheckCircle2 className="size-3" />} text="Região e horário" />
+            <Hint icon={<CheckCircle2 className="size-3" />} text="Como atende (entrega/agenda)" />
+            <Hint icon={<CheckCircle2 className="size-3" />} text="Formas de pagamento" />
+          </div>
+          <div className="flex items-center justify-end gap-3 flex-wrap pt-1">
+            <Button onClick={runAnalyze} disabled={analyzing || generating} size="lg">
+              {analyzing ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Wand2 className="size-4 mr-2" />}
+              Analisar e treinar IA
+            </Button>
+          </div>
+        </div>
+
+        <div className="text-center">
+          <Link to="/app/agente/avancado" className="text-xs text-muted-foreground underline">
+            Prefiro preencher tudo manualmente (edição avançada)
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+
+  const presetAtual = PERSONALIDADE_RESUMO.find((p) => p.value === (cfg?.personalidade || "padrao")) ?? PERSONALIDADE_RESUMO[0];
+  const bufferAtual = cfg?.segundos_buffer ?? 8;
+
+  // ---------- Tela com config: resumo + ajustes finos + teste ----------
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <header className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-display text-xl sm:text-2xl font-bold flex items-center gap-2">
+            <HelpTip text="Configure o agente IA: nome, personalidade, papel, sobre a empresa, instruções e regras. É aqui que você 'treina' como ele responde." />
+            <Bot className="size-5 text-[var(--brand-text)]" /> {cfg?.nome_agente || "Sua IA"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {cfg?.papel_objetivo || "Atendente virtual da sua empresa."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { setHasConfig(false); setDescricao(""); setStep("descrever"); setPerguntas([]); setRespostas({}); setResumoIA(""); setCobertura(0); }}>
+            <RefreshCcw className="size-3.5 mr-1.5" /> Refazer
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Save className="size-4 mr-1.5" />}
+            Salvar
+          </Button>
+        </div>
+      </header>
+
+      <div className="grid lg:grid-cols-[1fr_minmax(340px,400px)] gap-6">
+        <div className="space-y-4">
+          <Section title="O que a IA aprendeu" icon={<Sparkles className="size-3.5" />}>
+            <SummaryRow label="Empresa" value={cfg?.nome_empresa} />
+            <SummaryRow label="Segmento" value={cfg?.segmento} />
+            <SummaryRow label="Região / horário" value={cfg?.regiao_horario} />
+            <SummaryRow label="Sobre" value={cfg?.sobre_empresa} multiline />
+            <SummaryRow label="Produtos / serviços" value={cfg?.produtos_servicos} multiline />
+            <SummaryRow label="Como vende" value={cfg?.como_vender} multiline />
+            <SummaryRow label="Pode fazer" value={cfg?.pode_fazer} multiline />
+            <SummaryRow label="Não pode fazer" value={cfg?.nao_pode_fazer} multiline />
+          </Section>
+                    
+          <Section title="Personalidade do agente" icon={<Sparkles className="size-3.5" />}>
+            <div className="rounded-xl border border-[var(--brand)] bg-[var(--brand)]/10 p-3">
+              <div className="text-lg">{presetAtual.emoji}</div>
+              <div className="font-semibold text-sm mt-1">{presetAtual.label}</div>
+              <div className="text-[11px] text-muted-foreground leading-snug">{presetAtual.desc}</div>
+            </div>
+            <div className="text-right">
+              <Link to="/app/agente/avancado" className="text-xs text-muted-foreground underline">
+                Editar na edição avançada
+              </Link>
+            </div>
+          </Section>
+
+          <Section title="Tempo de espera (entender contexto)" icon={<Clock className="size-3.5" />}>
+            <p className="text-xs text-muted-foreground">
+              A IA aguarda esse tempo antes de responder. Se o cliente mandar várias mensagens em sequência, ela junta tudo e responde uma vez só — entendendo o contexto completo da conversa.
+            </p>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-3 flex items-center justify-between">
+              <span className="text-sm font-medium">Espera atual</span>
+              <span className="font-display text-lg font-semibold">
+                {bufferAtual}s{BUFFER_ROTULOS[bufferAtual] ? ` · ${BUFFER_ROTULOS[bufferAtual]}` : ""}
+              </span>
+            </div>
+            <div className="text-right">
+              <Link to="/app/agente/avancado" className="text-xs text-muted-foreground underline">
+                Editar na edição avançada
+              </Link>
+            </div>
+          </Section>
+
+          <Section title="Agendamento" icon={<Calendar className="size-3.5" />}>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-4">
+                      <div className="flex items-start gap-3">
+                      <Calendar className="size-5 text-[var(--brand-text)] mt-0.5" />
+                        <div className="flex-1">
+                        <div className="font-semibold flex items-center gap-2">
+                        Google Agenda
+                          {google?.conectado && <span className="text-[10px] bg-[var(--brand)]/15 text-[var(--brand-text)] px-1.5 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 className="size-3" />Conectado</span>}
+                    </div>
+                          {google?.email && <div className="text-xs text-muted-foreground">{google.email}</div>}
+                          <p className="text-xs text-muted-foreground mt-1">Permite que a IA marque eventos automaticamente, consultando os horários livres.</p>
+                </div>
+                    {!allowGoogleCal ? (
+                  <Link to="/app/checkout" className="text-xs underline text-muted-foreground">Disponível no Pro</Link>
+              ) : google?.conectado
+                                ? <Button size="sm" variant="outline" onClick={disconnectG}>Desconectar</Button>
+                                  : <Button size="sm" onClick={connectGoogle}><Link2 className="size-3.5 mr-1" />Conectar</Button>}
+                      </div>
+                      </div>
+            <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-3">
+            <span className="text-sm font-medium">Agendamento ativo</span>
+            <Switch checked={agendamentoAtivo} onCheckedChange={setAgendamentoAtivo} />
+            </div>
+            <div className="space-y-1.5">
+            <Label>Serviços agendáveis</Label>
+            <Textarea value={servicosAgendaveis} onChange={(e) => setServicosAgendaveis(e.target.value)} rows={2} placeholder="Ex: consulta, avaliação, orçamento…" />
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Duração padrão</Label>
+                <Input value={duracaoPadrao} onChange={(e) => setDuracaoPadrao(e.target.value)} placeholder="30 min" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Antecedência mínima</Label>
+                <Input value={antecedenciaMin} onChange={(e) => setAntecedenciaMin(e.target.value)} placeholder="Ex: 2 horas" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+            <Label>Horários disponíveis</Label>
+            <Textarea value={horariosDisponiveis} onChange={(e) => setHorariosDisponiveis(e.target.value)} rows={2} placeholder="Ex: seg a sex, 9h às 18h" />
+            </div>
+          </Section>
+          
+          <Collapsible>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
+              <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-[var(--panel-2)] transition">
+                <span className="font-display text-[12px] font-semibold uppercase tracking-wider text-[var(--brand-text)] flex items-center gap-1.5">
+                  <Settings2 className="size-3.5" /> Ajustes finos
+                </span>
+                <ChevronDown className="size-4 text-muted-foreground" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="px-5 pb-5 space-y-4 border-t border-[var(--border)] pt-4">
+                <div className="space-y-1.5">
+                  <Label>Tom das respostas</Label>
+                  <Select value={tamanhoResposta} onValueChange={(v) => setTamanhoResposta(v as any)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="curtas">Curtas (estilo WhatsApp)</SelectItem>
+                      <SelectItem value="medias">Médias</SelectItem>
+                      <SelectItem value="longas">Longas (explicativas)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Telefone para transferir atendimento</Label>
+                  <Input value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="+55 11 99999-0000" />
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Palavra para pausar IA</Label>
+                    <Input value={palavraPausar} onChange={(e) => setPalavraPausar(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Palavra para despausar</Label>
+                    <Input value={palavraDespausar} onChange={(e) => setPalavraDespausar(e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-3">
+                  <span className="text-sm font-medium">Responder em partes (1-3 bolhas)</span>
+                  <Switch checked={responderEmPartes} onCheckedChange={setResponderEmPartes} />
+                </div>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+
+          <div className="text-center">
+            <Link to="/app/agente/avancado" className="text-xs text-muted-foreground underline">
+              Edição avançada (todos os campos)
+            </Link>
+          </div>
+        </div>
+
+        <div className="space-y-4 lg:sticky lg:top-4 self-start">
+          <Section title="Testar resposta" icon={<Sparkles className="size-3.5" />}>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-4 space-y-2 min-h-[140px]">
+              <div className="flex justify-end">
+                <div className="max-w-[78%] bg-[var(--panel)] rounded-2xl rounded-br-md px-3.5 py-2.5 text-[13px]">{testMsg}</div>
+              </div>
+              {testReply.map((p, i) => (
+                <div key={i} className="flex justify-start gap-2 items-end">
+                  <InitialsAvatar name="IA" size={24} />
+                  <div className="max-w-[78%] bg-[var(--brand)]/15 text-foreground rounded-2xl rounded-bl-md px-3.5 py-2.5 text-[13px]">{p}</div>
+                </div>
+              ))}
+              {testing && <div className="text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="size-3 animate-spin" />pensando…</div>}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Input value={testMsg} onChange={(e) => setTestMsg(e.target.value)} placeholder="Mensagem do cliente…" />
+              <Button onClick={runTest} disabled={testing} size="icon">
+                {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Salve a configuração antes de testar para usar as últimas alterações.
+            </p>
+          </Section>
+
+          <Collapsible>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
+              <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-[var(--panel-2)] transition">
+                <span className="font-display text-[12px] font-semibold uppercase tracking-wider text-[var(--brand-text)] flex items-center gap-1.5">
+                  <Bot className="size-3.5" /> Ver prompt gerado
+                </span>
+                <ChevronDown className="size-4 text-muted-foreground" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <pre className="font-mono text-[11px] leading-relaxed text-[var(--brand-text)] whitespace-pre-wrap max-h-[360px] overflow-auto p-4 border-t border-[var(--border)]">
+{promptPreview}
+                </pre>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, icon, children }: { title?: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 space-y-3">
+      {title && (
+        <h3 className="font-display text-[12px] font-semibold uppercase tracking-wider text-[var(--brand-text)] flex items-center gap-1.5">
+          {icon}{title}
+        </h3>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, multiline }: { label: string; value?: string; multiline?: boolean }) {
+  if (!value || !value.trim()) return null;
+  return (
+    <div className="space-y-1">
+      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`text-sm ${multiline ? "whitespace-pre-wrap leading-relaxed" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+function Hint({ icon, text }: { icon: React.ReactNode; text: string }) {
+  return (
+    <div className="flex items-center gap-1.5 rounded-lg bg-[var(--panel-2)] px-2 py-1.5">
+      <span className="text-[var(--brand-text)]">{icon}</span>
+      <span className="truncate">{text}</span>
+    </div>
+  );
+}
+
