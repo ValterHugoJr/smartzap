@@ -5,8 +5,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, Power, QrCode, Smartphone, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw, Power, QrCode, Smartphone, Trash2, KeyRound } from "lucide-react";
 import { brand } from "@/config/brand";
 import { connectWhatsapp, checkWhatsappStatus, disconnectWhatsapp, deleteWhatsappInstance } from "@/lib/evolution.functions";
 import {
@@ -40,6 +41,9 @@ function ConexaoPage() {
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("disconnected");
   const [numero, setNumero] = useState<string | null>(null);
+  const [numeroInput, setNumeroInput] = useState("");
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [loadingCode, setLoadingCode] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -65,12 +69,12 @@ function ConexaoPage() {
         setQr(r.qrBase64);
         if (!pollRef.current) startPolling();
       }
-      if (r.status === "connected") { setQr(null); stopPolling(); if (!silent) toast.success("WhatsApp conectado!"); }
+      if (r.status === "connected") { setQr(null); setPairingCode(null); stopPolling(); if (!silent) toast.success("WhatsApp conectado!"); }
     } catch (e: any) { if (!silent) toast.error(e?.message || "Erro ao consultar status"); }
   }
 
   async function doConnect() {
-    setLoading(true); setQr(null);
+    setLoading(true); setQr(null); setPairingCode(null);
     try {
       const r = await connect();
       setQr(r.qrBase64 ?? null);
@@ -82,11 +86,24 @@ function ConexaoPage() {
     finally { setLoading(false); }
   }
 
+  async function doConnectCode() {
+    const digits = numeroInput.replace(/\D/g, "");
+    if (digits.length < 12 || digits.length > 13) { toast.error("Digite o número com DDI e DDD (ex.: 55 33 99999-9999)."); return; }
+    setLoadingCode(true); setPairingCode(null);
+    try {
+      const r: any = await connect({ data: { numero: digits } });
+      if (r.state === "open") { setStatus("connected"); setNumero(digits); toast.success("Já está conectado!"); }
+      else if (r.pairingCode) { setPairingCode(r.pairingCode); setStatus("connecting"); setQr(r.qrBase64 ?? null); toast.message("Código gerado. Digite no WhatsApp desse número."); startPolling(); }
+      else { toast.error("A Evolution não devolveu o código agora. Aguarde alguns minutos e tente de novo."); }
+    } catch (e: any) { toast.error(e?.message || "Falha ao gerar o código"); }
+    finally { setLoadingCode(false); }
+  }
+
   async function doDisconnect() {
     setLoading(true);
     try {
       await disconnect();
-      setStatus("disconnected"); setNumero(null); setQr(null); stopPolling();
+      setStatus("disconnected"); setNumero(null); setQr(null); setPairingCode(null); stopPolling();
       toast.success("Desconectado");
     } catch (e: any) { toast.error(e?.message || "Falha ao desconectar"); }
     finally { setLoading(false); }
@@ -96,7 +113,7 @@ function ConexaoPage() {
     setDeleting(true);
     try {
       await deleteInstance();
-      setStatus("disconnected"); setNumero(null); setQr(null); stopPolling();
+      setStatus("disconnected"); setNumero(null); setQr(null); setPairingCode(null); stopPolling();
       toast.success("Instância excluída. Clique em Conectar WhatsApp para gerar um novo QR Code.");
     } catch (e: any) { toast.error(e?.message || "Falha ao excluir a instância"); }
     finally { setDeleting(false); }
@@ -202,6 +219,32 @@ function ConexaoPage() {
           <div className="text-sm text-muted-foreground">Clique em <b>Conectar WhatsApp</b> para gerar o QR Code.</div>
         )}
       </Card>
+
+      {status !== "connected" && (
+        <Card className="p-6">
+          <h3 className="font-semibold text-base flex items-center gap-2"><KeyRound className="size-4" /> Conectar com código (sem QR)</h3>
+          <p className="text-sm text-muted-foreground mt-1">Se o QR Code não estiver conectando, gere um código de 8 dígitos e digite direto no WhatsApp do número que você quer conectar.</p>
+          <div className="flex flex-wrap items-center gap-2 mt-4">
+            <Input value={numeroInput} onChange={(e) => setNumeroInput(e.target.value)} placeholder="55 33 99999-9999" className="max-w-xs" inputMode="tel" />
+            <Button onClick={doConnectCode} disabled={loadingCode || loading || deleting}>
+              {loadingCode ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <KeyRound className="size-4 mr-1.5" />}
+              Gerar código
+            </Button>
+          </div>
+          {pairingCode && (
+            <div className="mt-5 space-y-3">
+              <div className="text-3xl font-bold tracking-[0.3em] font-mono">{pairingCode}</div>
+              <ol className="list-decimal pl-5 space-y-1.5 text-sm text-muted-foreground">
+                <li>No celular desse número, abra o WhatsApp.</li>
+                <li>Toque em <b>Aparelhos conectados</b> e em <b>Conectar um aparelho</b>.</li>
+                <li>Toque em <b>Conectar com número de telefone</b>.</li>
+                <li>Digite o código acima. Ele expira rápido — se vencer, gere outro.</li>
+              </ol>
+              <p className="text-xs text-muted-foreground">Verificando a conexão a cada 5 s.</p>
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="rounded-2xl border border-border bg-card p-5">
         <h3 className="font-display text-[13px] font-semibold mb-3 flex items-center gap-2"><Smartphone className="size-4 text-[var(--brand-text)]" />Como funciona</h3>
