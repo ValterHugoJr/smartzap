@@ -33,7 +33,10 @@ async function resolveCompanyId(supabase: any, userId: string): Promise<string> 
 
 export const connectWhatsapp = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: { numero?: string } | undefined) => d ?? {})
+  .handler(async ({ context, data }) => {
+    const numeroPareamento = String((data as any)?.numero || "").replace(/\D/g, "");
+    const numeroValido = numeroPareamento.length >= 12 && numeroPareamento.length <= 13 ? numeroPareamento : undefined;
     const { supabase, userId } = context;
     const companyId = await resolveCompanyId(supabase, userId);
     const {
@@ -66,7 +69,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
               .update({ status: "connected", webhook_token: webhookToken, webhook_configured_at: new Date().toISOString() } as any)
               .eq("company_id", companyId);
           }
-          return { instanceName: existing.instance_name, qrBase64: null, code: null, state: "open", webhookUrl };
+          return { instanceName: existing.instance_name, qrBase64: null, code: null, pairingCode: null, state: "open", webhookUrl };
         }
       } catch {}
     }
@@ -74,7 +77,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     await supabase
       .from("whatsapp_instances")
       .upsert(
-        { company_id: companyId, user_id: userId, instance_name: instanceName, status: "connecting", webhook_token: webhookToken } as any,
+        { company_id: companyId, user_id: userId, instance_name: instanceName, status: "connecting", webhook_token: webhookToken, ...(numeroValido ? { numero: numeroValido } : {}) } as any,
         { onConflict: "company_id" },
       );
 
@@ -102,13 +105,15 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
 
     let qrBase64: string | null = null;
     let code: string | null = null;
+    let pairingCode: string | null = null;
     let lastQrError: unknown = null;
     for (let i = 0; i < 6; i++) {
       try {
-        const qr = await evoGetQr(instanceName, instKey);
+        const qr = await evoGetQr(instanceName, instKey, numeroValido);
         qrBase64 = qr.qrBase64;
         code = qr.code;
-        if (qrBase64 || code) break;
+        pairingCode = qr.pairingCode;
+        if (qrBase64 || code || pairingCode) break;
       } catch (e) { lastQrError = e; console.warn("[evolution.connect]", e); }
       await new Promise((r) => setTimeout(r, 800));
     }
@@ -123,7 +128,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
       state = s?.instance?.state || (s as any)?.state;
     } catch {}
 
-    return { instanceName, qrBase64, code, state, webhookUrl };
+    return { instanceName, qrBase64, code, pairingCode, state, webhookUrl };
   });
 
 export const checkWhatsappStatus = createServerFn({ method: "POST" })
