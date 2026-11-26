@@ -78,9 +78,12 @@ export async function evoCreateInstance(instanceName: string, webhookUrl?: strin
   return evo(`/instance/create`, { method: "POST", json: body, apiKey });
 }
 
-export async function evoConnect(instanceName: string, apiKey?: string): Promise<{ base64?: string; code?: string; pairingCode?: string }> {
+export async function evoConnect(instanceName: string, apiKey?: string, number?: string): Promise<{ base64?: string; code?: string; pairingCode?: string }> {
   // GET /instance/connect/{instance} → { base64, code, pairingCode }
-  return evo(`/instance/connect/${encodeURIComponent(instanceName)}`, { method: "GET", apiKey });
+  // Com number (DDI+DDD+número, só dígitos), a Evolution devolve também o
+  // pairingCode (código de 8 dígitos para conectar sem QR Code).
+  const qs = number ? `?number=${encodeURIComponent(number)}` : "";
+  return evo(`/instance/connect/${encodeURIComponent(instanceName)}${qs}`, { method: "GET", apiKey });
 }
 
 function asImageDataUrl(value: unknown, allowRawBase64 = false): string | null {
@@ -121,8 +124,8 @@ function extractQrCode(payload: any): string | null {
   return null;
 }
 
-export async function evoGetQr(instanceName: string, apiKey?: string): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
-  const payload: any = await evoConnect(instanceName, apiKey);
+export async function evoGetQr(instanceName: string, apiKey?: string, number?: string): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
+  const payload: any = await evoConnect(instanceName, apiKey, number);
   const image =
     asImageDataUrl(payload?.base64, true) ||
     asImageDataUrl(payload?.qrcode?.base64, true) ||
