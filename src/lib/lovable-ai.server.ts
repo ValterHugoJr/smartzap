@@ -126,8 +126,9 @@ async function anthropicChat(key: string, model: string, messages: ChatMsg[]): P
 async function googleDirectChatOnce(key: string, model: string, messages: ChatMsg[]): Promise<string> {
   let directModel = model.replace(/^google\//, "");
   // O gemini-2.5-flash foi encerrado pra contas novas (404 do Google);
-  // qualquer variação 2.5 cai pro modelo atual sugerido pelo Google.
-  if (directModel.startsWith("gemini-2.5")) directModel = "gemini-3.8-flash";
+  // qualquer variação 2.5 cai pro flash-lite, escolhido pela cota gratuita
+  // bem maior no tier gratuito da API.
+  if (directModel.startsWith("gemini-2.5")) directModel = "gemini-3.5-flash-lite";
   const res = await fetchAi("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -164,14 +165,16 @@ export async function lovableAiChat(
   return aiChat(cfg, messages);
 }
 
-// Chamada direta ao Google com resiliência: se o modelo principal estiver
-// congestionado (503) ou indisponível (404), tenta de novo e, persistindo,
-// cai pro modelo reserva (flash-lite) — um pico do Google não pode travar
-// o atendimento nem a montagem do agente.
+// Chamada direta ao Google com resiliência: o principal é o flash-lite
+// (cota gratuita bem maior); se ele estiver congestionado (503),
+// indisponível (404) ou com a cota do dia esgotada (429), tenta de novo e,
+// persistindo, cai pro modelo reserva (3.8-flash) — um pico do Google não
+// pode travar o atendimento nem a montagem do agente.
 async function googleDirectChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
   const base = model.replace(/^google\//, "");
-  const primary = base.startsWith("gemini-2.5") ? "gemini-3.8-flash" : base;
-  const candidates = primary === "gemini-3.5-flash-lite" ? [primary] : [primary, "gemini-3.5-flash-lite"];
+  const primary = base.startsWith("gemini-2.5") ? "gemini-3.5-flash-lite" : base;
+  const reserve = primary === "gemini-3.8-flash" ? "gemini-3.5-flash-lite" : "gemini-3.8-flash";
+  const candidates = [primary, reserve];
   let lastError: unknown = null;
   for (const cand of candidates) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -188,6 +191,7 @@ async function googleDirectChat(key: string, model: string, messages: ChatMsg[])
           break;
         }
         if (/404/.test(msg)) break;
+        if (/429|Limite de uso/i.test(msg)) break;
         throw e;
       }
     }
