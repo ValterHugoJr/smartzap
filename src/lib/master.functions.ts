@@ -116,6 +116,116 @@ export const suspendCompany = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const deleteCompany = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { companyId: string; confirmName: string }) => d)
+  .handler(async ({ context, data }) => {
+    await assertSuper(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const companyId = data.companyId;
+
+    const { data: company } = await supabaseAdmin
+      .from("company")
+      .select("id, nome")
+      .eq("id", companyId)
+      .maybeSingle();
+    if (!company) throw new Error("Empresa não encontrada");
+    if (String(data.confirmName || "").trim() !== String((company as any).nome || "").trim()) {
+      throw new Error("O nome digitado não confere com o nome da empresa");
+    }
+
+    // Membros: quem só pertence a esta empresa perde também o login
+    // (auth + perfil + papéis). Super_admin NUNCA é apagado.
+    const { data: memberRows } = await supabaseAdmin
+      .from("company_user")
+      .select("user_id")
+      .eq("company_id", companyId);
+    const memberIds = [...new Set((memberRows ?? []).map((m: any) => m.user_id as string))];
+
+    // Instância do WhatsApp: apaga no servidor Evolution antes (se falhar,
+    // não trava a exclusão — a instância órfã pode ser removida à mão).
+    const { data: inst } = await supabaseAdmin
+      .from("whatsapp_instances")
+      .select("instance_name, api_key")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if ((inst as any)?.instance_name) {
+      try {
+        const { evoDelete } = await import("./evolution.server");
+        await evoDelete((inst as any).instance_name, (inst as any)?.api_key || undefined);
+      } catch (e) {
+        console.warn("[master.deleteCompany] evoDelete", e);
+      }
+    }
+
+    // Arquivos do logo no Storage (pasta = companyId).
+    try {
+      const { data: files } = await supabaseAdmin.storage.from("logos").list(companyId);
+      if (files?.length) {
+        await supabaseAdmin.storage.from("logos").remove(files.map((f: any) => `${companyId}/${f.name}`));
+      }
+    } catch (e) {
+      console.warn("[master.deleteCompany] storage", e);
+    }
+
+    // Tabelas filhas primeiro (FKs entre tabelas da empresa), depois as
+    // demais com company_id, e por fim a empresa. voice_config não está
+    // nos tipos gerados, mas existe (migração 0001) — entra via `as any`.
+    const orderedTables = [
+      "agendamento", "lead_evento", "lead_nota", "fin_lancamento",
+      "webhook_delivery_log", "campaign_target",
+      "crm_cards", "campaign", "fin_categoria", "webhook_endpoint",
+      "crm_stage",
+      "agent_config", "api_token", "audit_log", "company_billing",
+      "contact_pause", "credit_ledger", "csat_response",
+      "google_integration", "mensagens", "message_template", "produto",
+      "subscription", "voice_config", "whatsapp_instances",
+      "company_user",
+    ];
+    let total = 0;
+    for (const table of orderedTables) {
+      const { error, count } = await (supabaseAdmin as any)
+        .from(table)
+        .delete({ count: "exact" })
+        .eq("company_id", companyId);
+      if (error) throw new Error(`Falha ao excluir dados de ${table}: ${error.message}`);
+      total += count ?? 0;
+    }
+    // billing_event_log referencia a empresa por matched_company_id.
+    const { error: bevErr } = await (supabaseAdmin as any)
+      .from("billing_event_log")
+      .delete()
+      .eq("matched_company_id", companyId);
+    if (bevErr) throw new Error(`Falha ao excluir dados de billing_event_log: ${bevErr.message}`);
+
+    const { error: compErr } = await supabaseAdmin.from("company").delete().eq("id", companyId);
+    if (compErr) throw new Error(`Falha ao excluir a empresa: ${compErr.message}`);
+
+    // Logins exclusivos desta empresa.
+    let loginsRemovidos = 0;
+    for (const uid of memberIds) {
+      if (uid === context.userId) continue;
+      const { count: links } = await supabaseAdmin
+        .from("company_user")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid);
+      if ((links ?? 0) > 0) continue;
+      const { data: role } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid)
+        .eq("role", "super_admin")
+        .maybeSingle();
+      if (role) continue;
+      await supabaseAdmin.from("profiles").delete().eq("user_id", uid);
+      await supabaseAdmin.from("user_roles").delete().eq("user_id", uid);
+      const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(uid);
+      if (!authErr) loginsRemovidos++;
+    }
+
+    return { ok: true, registros: total, loginsRemovidos };
+  });
+
 export const setCompanyLifetime = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { companyId: string; lifetime: boolean; planSlug?: string }) => d)
