@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { LogIn, Pause, Play, CalendarClock, Loader2, KeyRound, Eye, Sparkles, Crown } from "lucide-react";
+import { LogIn, Pause, Play, CalendarClock, Loader2, KeyRound, Eye, Sparkles, Crown, Trash2 } from "lucide-react";
 import { brand } from "@/config/brand";
-import { listCompanies, suspendCompany, extendTrial, resetCompanyOwnerPassword, getCompanyDetails, setCompanyLifetime, setCompanyInstance } from "@/lib/master.functions";
+import { listCompanies, suspendCompany, extendTrial, resetCompanyOwnerPassword, getCompanyDetails, setCompanyLifetime, setCompanyInstance, deleteCompany } from "@/lib/master.functions";
 import { adminGrantCredits } from "@/lib/credits.functions";
 
 export const Route = createFileRoute("/master/empresas")({
@@ -27,6 +27,7 @@ function EmpresasPage() {
   const details = useServerFn(getCompanyDetails);
   const setInst = useServerFn(setCompanyInstance);
   const grantCredits = useServerFn(adminGrantCredits);
+  const deleteFn = useServerFn(deleteCompany);
   const [detail, setDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [instNome, setInstNome] = useState("");
@@ -68,6 +69,30 @@ function EmpresasPage() {
   const [lifetimeTarget, setLifetimeTarget] = useState<any | null>(null);
   const [lifetimePlan, setLifetimePlan] = useState<string>("business");
   const [lifetimeSaving, setLifetimeSaving] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  function doDelete(c: any) {
+    setDeleteConfirm("");
+    setDeleteTarget(c);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const r: any = await deleteFn({ data: { companyId: deleteTarget.id, confirmName: deleteConfirm } });
+      toast.success(`Empresa "${deleteTarget.nome}" excluída (${r?.registros ?? 0} registros, ${r?.loginsRemovidos ?? 0} logins removidos)`);
+      setDeleteTarget(null);
+      reload();
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao excluir a empresa");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function doLifetime(c: any) {
     setLifetimePlan((c as any).plano_vitalicio || "business");
@@ -253,6 +278,9 @@ function EmpresasPage() {
                     title={c.status_cobranca === "suspenso" ? "Reativar" : "Suspender"}>
                     {c.status_cobranca === "suspenso" ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
                   </Button>
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => doDelete(c)} title="Excluir empresa">
+                    <Trash2 className="size-3.5" />
+                  </Button>
                   <Button size="sm" onClick={() => impersonate(c.id)} title="Entrar como">
                     <LogIn className="size-3.5 mr-1" /> Entrar
                   </Button>
@@ -395,7 +423,39 @@ function EmpresasPage() {
               </Button>
               <Button onClick={() => void confirmLifetime()} disabled={lifetimeSaving}>
                 {lifetimeSaving ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Crown className="size-4 mr-1.5" />}
-                {lifetimeTarget?.status_cobranca === "vitalicio" ? "Salvar plano" : "Tornar vitalícia"}
+                                {lifetimeTarget?.status_cobranca === "vitalicio" ? "Salvar plano" : "Tornar vitalícia"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="size-5 text-destructive" />
+              Excluir empresa
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>
+              Você está prestes a excluir <b>{deleteTarget?.nome}</b> e <b>todos os dados dela</b>:
+              conversas, contatos, cards do CRM, campanhas, financeiro, agendamentos,
+              configuração da IA, instância do WhatsApp e os logins dos usuários dela.
+            </p>
+            <p className="text-destructive font-medium">Essa ação é definitiva e não pode ser desfeita.</p>
+            <div>
+              <p className="mb-1.5">Para confirmar, digite o nome exato da empresa:</p>
+              <Input value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder={deleteTarget?.nome ?? ""} />
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <Button variant="outline" className="ml-auto" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={() => void confirmDelete()} disabled={deleting || deleteConfirm.trim() !== (deleteTarget?.nome ?? "").trim()}>
+                {deleting ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Trash2 className="size-4 mr-1.5" />}
+                Excluir definitivamente
               </Button>
             </div>
           </div>
