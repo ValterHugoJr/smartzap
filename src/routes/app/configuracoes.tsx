@@ -20,6 +20,7 @@ import { TemplatesTab } from "@/components/config/templates-tab";
 import { HorariosTab } from "@/components/config/horarios-tab";
 import { listAuditLog, exportLgpd } from "@/lib/security.functions";
 import { finStatus, enableFinanceiro } from "@/lib/financeiro.functions";
+import { updateMyCompanySlug } from "@/lib/company.functions";
 import { featuresFor } from "@/lib/plan-features";
 
 export const Route = createFileRoute("/app/configuracoes")({
@@ -37,9 +38,10 @@ function ConfigPage() {
   const companyId = ctx.company?.id;
   const userId = ctx.user.id;
   const company = ctx.company;
+  const updateSlug = useServerFn(updateMyCompanySlug);
 
   const [empresa, setEmpresa] = useState({ nome: "", telefone: "" });
-  const [identidade, setIdentidade] = useState({ primary_color: "#22C55E", logo_url: "" });
+  const [identidade, setIdentidade] = useState({ primary_color: "#22C55E", logo_url: "", slug: "" });
   const [perfil, setPerfil] = useState({ nome: "", email: ctx.user.email ?? "" });
   const [senha, setSenha] = useState({ nova: "", confirma: "" });
   const [savingE, setSavingE] = useState(false);
@@ -51,7 +53,7 @@ function ConfigPage() {
   useEffect(() => {
     if (ctx.company) {
       setEmpresa({ nome: ctx.company.nome, telefone: ctx.company.telefone ?? "" });
-      setIdentidade({ primary_color: ctx.company.primary_color, logo_url: ctx.company.logo_url ?? "" });
+      setIdentidade({ primary_color: ctx.company.primary_color, logo_url: ctx.company.logo_url ?? "", slug: ctx.company.slug ?? "" });
     }
     void (async () => {
       const { data } = await supabase.from("profiles").select("nome").eq("user_id", userId).maybeSingle();
@@ -103,15 +105,24 @@ function ConfigPage() {
     }
   }
 
-  async function saveIdentidade() {
+    async function saveIdentidade() {
     if (!companyId) return;
     setSavingI(true);
-    const { error } = await supabase.from("company").update({
-      primary_color: identidade.primary_color, logo_url: identidade.logo_url || null,
-    }).eq("id", companyId);
-    setSavingI(false);
-    if (error) return toast.error(error.message);
-    toast.success("Identidade atualizada"); setTimeout(() => location.reload(), 500);
+    try {
+      const novoSlug = identidade.slug.trim().toLowerCase();
+      if (novoSlug !== (company?.slug ?? "")) {
+        await updateSlug({ data: { slug: novoSlug } });
+      }
+      const { error } = await supabase.from("company").update({
+        primary_color: identidade.primary_color, logo_url: identidade.logo_url || null,
+      }).eq("id", companyId);
+      if (error) return toast.error(error.message);
+      toast.success("Identidade atualizada"); setTimeout(() => location.reload(), 500);
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao salvar a identidade");
+    } finally {
+      setSavingI(false);
+    }
   }
 
   async function savePerfil() {
@@ -224,8 +235,8 @@ function ConfigPage() {
             </div>
             <div>
               <Label>Slug público</Label>
-              <Input value={company?.slug ?? ""} readOnly placeholder="—" className="mt-1" />
-              <p className="text-[11px] text-muted-foreground mt-1">Identificador público da sua empresa, gerado automaticamente no cadastro.</p>
+              <Input value={identidade.slug} onChange={(e) => setIdentidade({ ...identidade, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} placeholder="minha-empresa" className="mt-1" />
+              <p className="text-[11px] text-muted-foreground mt-1">Identificador público da sua empresa. Use só letras minúsculas, números e hífen — precisa ser único.</p>
             </div>
             <div className="flex justify-end">
               <Button onClick={saveIdentidade} disabled={savingI}>
